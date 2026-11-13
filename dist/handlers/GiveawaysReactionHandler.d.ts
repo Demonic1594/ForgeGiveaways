@@ -4,6 +4,7 @@ import { ForgeClient } from "@tryforge/forgescript";
  * leaves. Members who don't meet the requirements get their reaction removed.
  */
 export declare class GiveawaysReactionHandler {
+    #private;
     private readonly client;
     constructor(client: ForgeClient);
     private get ext();

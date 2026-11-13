@@ -11,10 +11,13 @@ export declare function chunkJoin(items: readonly string[], sep: string, max: nu
 /** Splits an array into slices of at most `size` items. */
 export declare function chunk<T>(items: readonly T[], size: number): T[][];
 /**
- * Extracts a snowflake from a raw id or a mention such as `<@&123>`/`<@!123>`.
- * Returns null for anything else.
+ * Extracts a role id from a raw id or a role mention (`<@&123>`). A user or
+ * channel mention is not a role, so it is refused instead of being stored as
+ * a requirement nobody can ever meet. Returns null for anything else.
  */
 export declare function parseSnowflake(input: string | null | undefined): string | null;
+/** Whether a URL can be shown in an embed (Discord only accepts http and https). */
+export declare function isEmbedURL(input: string | null | undefined): boolean;
 /**
  * Turns a millisecond duration into a compact human string, e.g. "1y 3d 4h".
  */

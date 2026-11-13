@@ -1,5 +1,5 @@
 import { EventManager, ForgeClient, ForgeExtension, Logger } from "@tryforge/forgescript"
-import { ButtonStyle, ColorResolvable } from "discord.js"
+import { ButtonStyle, ColorResolvable, resolveColor } from "discord.js"
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers"
 import { GiveawaysInteractionHandler, GiveawaysReactionHandler, IGiveawayEvents } from "./handlers"
 import { TypedEmitter } from "tiny-typed-emitter"
@@ -105,6 +105,14 @@ export class ReForgeGiveaways extends ForgeExtension {
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000)
         o.handleSignals ??= true
         o.colors = { active: "Green", paused: "Yellow", ended: "Red", cancelled: "Grey", ...o.colors }
+        // Fail at start-up with a clear message instead of on every giveaway.
+        for (const [name, color] of Object.entries(o.colors)) {
+            try {
+                resolveColor(color!)
+            } catch {
+                throw new Error(`[ReForgeGiveaways] Invalid color for "${name}": ${String(color)}`)
+            }
+        }
         // Only real texts override a default: `{ joined: undefined }` must not blank it.
         const texts = Object.entries(o.messages ?? {}).filter(([key, text]) => key in DEFAULT_MESSAGES && typeof text === "string")
         o.messages = { ...DEFAULT_MESSAGES, ...Object.fromEntries(texts) }

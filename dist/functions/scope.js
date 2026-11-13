@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.wipeScope = wipeScope;
 exports.canStartIn = canStartIn;
 exports.scopedGiveaway = scopedGiveaway;
 const structures_1 = require("../structures");
@@ -20,6 +21,16 @@ function contextScope(ctx) {
     if (guildID)
         return guildID;
     return ctx.interaction || ctx.message || ctx.channel || ctx.user ? false : null;
+}
+/**
+ * Which giveaways `$wipeGiveaways` may delete: those of one guild (an id),
+ * every giveaway (`null`, only from contexts nobody outside the bot can
+ * trigger), or none (`false`, a direct message without a guild argument).
+ * A command running in a guild only ever wipes that guild: 2.1.0 deleted
+ * the giveaways of every server when the argument was left out.
+ */
+function wipeScope(ctx, guild) {
+    return guild?.id ?? contextScope(ctx);
 }
 /**
  * Whether a context may start a giveaway in a channel of `channelGuildID`.

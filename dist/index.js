@@ -65,6 +65,15 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000);
         o.handleSignals ??= true;
         o.colors = { active: "Green", paused: "Yellow", ended: "Red", cancelled: "Grey", ...o.colors };
+        // Fail at start-up with a clear message instead of on every giveaway.
+        for (const [name, color] of Object.entries(o.colors)) {
+            try {
+                (0, discord_js_1.resolveColor)(color);
+            }
+            catch {
+                throw new Error(`[ReForgeGiveaways] Invalid color for "${name}": ${String(color)}`);
+            }
+        }
         // Only real texts override a default: `{ joined: undefined }` must not blank it.
         const texts = Object.entries(o.messages ?? {}).filter(([key, text]) => key in structures_1.DEFAULT_MESSAGES && typeof text === "string");
         o.messages = { ...structures_1.DEFAULT_MESSAGES, ...Object.fromEntries(texts) };

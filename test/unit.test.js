@@ -127,7 +127,7 @@ test("weighted order respects bonus entries", () => {
 test("text helpers", () => {
     assert.deepEqual(chunkJoin(["aaa", "bbb", "ccc"], ", ", 8), ["aaa, bbb", "ccc"])
     assert.equal(parseSnowflake("<@&123456789012345678>"), "123456789012345678")
-    assert.equal(parseSnowflake("<@!123456789012345678>"), "123456789012345678")
+    assert.equal(parseSnowflake("<@!123456789012345678>"), null, "a user mention is not a role")
     assert.equal(parseSnowflake("nope"), null)
     assert.equal(formatDuration(400 * DAY), "1y 5w")
     assert.equal(format(DEFAULT_MESSAGES.left, { prize: "Nitro" }), "👋 You left the giveaway for **Nitro**.")
