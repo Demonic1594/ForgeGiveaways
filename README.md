@@ -443,7 +443,7 @@ To run the single-process test files against PostgreSQL instead of SQLite, point
 ```bash
 npm i --no-save pg
 export GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
-node --test test/regression.test.js   # likewise adversarial.test.js and custom.test.js, each on an empty database
+node --test test/regression.test.js   # likewise adversarial, custom and hardening, each on an empty database
 ```
 
 #### Releasing

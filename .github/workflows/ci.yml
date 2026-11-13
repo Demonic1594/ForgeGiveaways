@@ -58,7 +58,7 @@ jobs:
         env:
           PGPASSWORD: postgres
         run: |
-          for file in regression adversarial custom; do
+          for file in regression adversarial custom hardening; do
             psql -h 127.0.0.1 -U postgres -c "CREATE DATABASE gw_$file"
             GIVEAWAYS_TEST_DB="{\"type\":\"postgres\",\"host\":\"127.0.0.1\",\"username\":\"postgres\",\"password\":\"postgres\",\"database\":\"gw_$file\"}" \
               node --test "test/$file.test.js"

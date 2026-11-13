@@ -54,17 +54,32 @@ async function checkInvariants(ids) {
 // Seeds 2, 3 and 10 once found a winner whose entry had been removed after the end.
 const SEEDS = process.env.FUZZ_SEED ? [Number(process.env.FUZZ_SEED)] : [1337, 2, 3, 10]
 for (const seed of SEEDS) test(`fuzz (seed ${seed}): 1,500 random concurrent operations with 15% injected database failures keep every invariant`, async () => {
+    // Two streams: which operations run, and which writes fail. Writes
+    // happen at moments that depend on timing (background entry flushes),
+    // so sharing one stream made the operation sequence differ between a
+    // fast and a slow database, and a seed could not be replayed.
     const random = rng(seed)
+    const failure = rng(seed ^ 0x5bd1e995)
     const pick = (arr) => arr[Math.floor(random() * arr.length)]
     const members = Array.from({ length: 40 }, () => h.addMember(snow()))
     const ids = []
-    for (let i = 0; i < 6; i++) ids.push((await h.manager.start(base({ winnersCount: 1 + (i % 3) }))).id)
+    let live = []
+    const startOne = async (i) => {
+        const g = await h.manager.start(base({ winnersCount: 1 + (i % 3) }))
+        ids.push(g.id)
+        return g.id
+    }
+    for (let i = 0; i < 6; i++) live.push(await startOne(i))
 
     const realSet = Database.set
     let chaos = true
     let injected = 0
+    let writes = 0
     Database.set = async function (g) {
-        if (chaos && random() < 0.15) { injected++; throw new Error("injected: database unavailable") }
+        if (chaos) {
+            writes++
+            if (failure() < 0.15) { injected++; throw new Error("injected: database unavailable") }
+        }
         return realSet.call(this, g)
     }
 
@@ -85,8 +100,18 @@ for (const seed of SEEDS) test(`fuzz (seed ${seed}): 1,500 random concurrent ope
     ]
     try {
         for (let round = 0; round < 150; round++) {
-            const batch = Array.from({ length: 10 }, () => pick(ops)(pick(ids)).catch(() => {}))
+            // Mostly live giveaways, sometimes ended ones (reroll, late clicks).
+            const batch = Array.from({ length: 10 }, () => pick(ops)(random() < 0.8 ? pick(live) : pick(ids)).catch(() => {}))
             await Promise.all(batch)
+            // Keep six giveaways running, so the storm never runs out of targets.
+            const running = []
+            for (const id of live) if (!(await Database.get(id))?.hasEnded) running.push(id)
+            // A start can hit an injected failure too; try again, as a bot would.
+            while (running.length < 6) {
+                const id = await startOne(round).catch(() => null)
+                if (id) running.push(id)
+            }
+            live = running
         }
     } finally {
         chaos = false
@@ -96,7 +121,9 @@ for (const seed of SEEDS) test(`fuzz (seed ${seed}): 1,500 random concurrent ope
     await sleep(200)
     await m.flushAll()
     await sleep(100)
-    assert.ok(injected >= 10, `seed ${seed}: only ${injected} failures were injected`)
+    if (process.env.FUZZ_STATS) console.log(`FUZZ seed=${seed} writes=${writes} injected=${injected} giveaways=${ids.length}`)
+    assert.ok(writes >= 300, `seed ${seed}: only ${writes} database writes, the storm did too little`)
+    assert.ok(injected >= 0.08 * writes, `seed ${seed}: only ${injected} of ${writes} writes failed`)
     await checkInvariants(ids)
 })
 
