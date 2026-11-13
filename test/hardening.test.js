@@ -121,3 +121,19 @@ test("clicks on a deleted giveaway's message are logged once, not once per click
     assert.equal(logged.length, 1)
     assert.equal(replies.length, 50, "every click is still answered")
 })
+
+test("embed image links are checked by the extension, not converted by ForgeScript first", () => {
+    const { ArgType } = require("@tryforge/forgescript")
+    // ForgeScript's URL type turns anything that is not an https link into a Discord emoji link
+    // (https://cdn.discordapp.com/emojis/undefined.png...) before execute runs, so in 2.2.0 an
+    // ftp:// or javascript: link was stored as a broken image instead of being refused.
+    for (const file of ["setGiveawayImage", "setGiveawayThumbnail"]) {
+        const fn = require(`../dist/native/builder/${file}`).default
+        assert.equal(fn.data.args[0].type, ArgType.String, `${file} takes the link as text`)
+        const self = { customError: (m) => ({ error: m }), success: () => ({ ok: true }) }
+        assert.match(fn.data.execute.call(self, {}, ["ftp://example.com/a.png"]).error ?? "", /http\(s\) link/)
+        assert.match(fn.data.execute.call(self, {}, ["javascript:alert(1)"]).error ?? "", /http\(s\) link/)
+        const ctx = {}
+        assert.deepEqual(fn.data.execute.call(self, ctx, ["https://example.com/a.png"]), { ok: true })
+    }
+})

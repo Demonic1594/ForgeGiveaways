@@ -14,7 +14,7 @@ export default new NativeFunction({
             description: "The value to set",
             rest: false,
             required: true,
-            type: ArgType.URL,
+            type: ArgType.String,
         },
     ],
     execute(ctx, [text]) {
