@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Database = void 0;
 const GiveawaysDatabaseManager_1 = require("../managers/GiveawaysDatabaseManager");
+const typeorm_1 = require("typeorm");
 const Giveaway_1 = require("./Giveaway");
 const schema_1 = require("./schema");
 function driverOf(type) {
@@ -131,6 +132,12 @@ class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
         if (channelID)
             where.channelID = channelID;
         return (await this.repo().findOne({ where: where })) ?? null;
+    }
+    /** Ended giveaways whose result was never announced (the bot stopped mid-way). */
+    static async findPendingAnnouncements() {
+        const kinds = ["end", "reroll"];
+        const where = this.driver === "mongodb" ? { announcePending: { $in: kinds } } : { announcePending: (0, typeorm_1.In)(kinds) };
+        return await this.repo().find({ where: where });
     }
     /** Gets all existing giveaways. */
     static async getAll() {

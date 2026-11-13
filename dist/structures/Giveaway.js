@@ -87,6 +87,12 @@ class Giveaway {
     maxEntries;
     /** Presentation options for the default messages. */
     display;
+    /**
+     * Set in the same write that ends or rerolls the giveaway and cleared once
+     * the result was announced. If the bot dies in between, the announcement
+     * is made on the next start instead of being lost.
+     */
+    announcePending;
     constructor(options) {
         this.id = options?.id ?? discord_js_1.SnowflakeUtil.generate().toString();
         this.prize = options?.prize ?? "";
@@ -108,6 +114,7 @@ class Giveaway {
         this.entryWeights = null;
         this.winners = [];
         this.previousWinners = null;
+        this.announcePending = null;
     }
     /** Returns the end timestamp of this giveaway. */
     endTimestamp() {

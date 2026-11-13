@@ -15,7 +15,12 @@ const DAY = 864e5
 const snow = (agoMs = 2 * 365 * DAY) => SnowflakeUtil.generate({ timestamp: Date.now() - agoMs }).toString()
 
 async function boot(dir, options = {}) {
-    const giveaways = new ForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...options })
+    const { autoMembers, ...extOptions } = options
+    const giveaways = new ForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...extOptions })
+    // Record every event from the very start (restore runs during boot).
+    const emitted = []
+    const realEmit = giveaways.emitter.emit.bind(giveaways.emitter)
+    giveaways.emitter.emit = (name, ...args) => { emitted.push({ name, args }); return realEmit(name, ...args) }
     const client = new ForgeClient({
         intents: ["Guilds"],
         extensions: [giveaways, new ForgeDB({ type: "better-sqlite3", folder: dir })],
@@ -37,6 +42,7 @@ async function boot(dir, options = {}) {
             edit: async (p) => { msg.payloads.push(p); return msg },
             reply: async (p) => { sent.push({ replyTo: id, ...p }); return makeMessage(p) },
             react: async () => {},
+            reactions: { cache: [] },
         }
         messages.set(id, msg)
         return msg
@@ -55,12 +61,15 @@ async function boot(dir, options = {}) {
             cache: new Map(),
             fetch: async (arg) => {
                 if (typeof arg === "string") {
-                    const m = members.get(arg)
+                    const m = members.get(arg) ?? (autoMembers ? addMember(arg) : undefined)
                     if (!m) throw new Error("Unknown Member")
                     return m
                 }
                 const out = new Map()
-                for (const id of arg.user) if (members.has(id)) out.set(id, members.get(id))
+                for (const id of arg.user) {
+                    if (!members.has(id) && autoMembers) addMember(id)
+                    if (members.has(id)) out.set(id, members.get(id))
+                }
                 return out
             },
         },
@@ -73,10 +82,12 @@ async function boot(dir, options = {}) {
     }
 
     manager.getChannel = async () => channel
+    let guildState = "ok"
+    manager.guildStatus = async () => guildState
     manager.getGuild = async () => guild
     manager.fetchMessage = async (_c, id) => messages.get(id)
 
-    return { client, giveaways, manager, sent, messages, addMember, members, guild, channel, dir }
+    return { emitted, client, giveaways, manager, sent, messages, addMember, members, guild, channel, dir, setGuildState: (v) => { guildState = v } }
 }
 
 module.exports = { boot, snow, DAY, dbFile: (dir) => path.join(dir, "giveaways.db") }

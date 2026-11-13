@@ -30,6 +30,8 @@ This is a modified fork of [tryforge/ForgeGiveaways](https://github.com/tryforge
 - A failing event command, Discord API error or database hiccup is logged and does not crash the bot.
 - Pending writes are flushed on `SIGINT`/`SIGTERM`.
 
+**Survives downtime.** Restarts, crashes at any point, Discord outages, database hiccups and host sleep are all recovered from; see [Downtime, restarts and crashes](#downtime-restarts-and-crashes).
+
 **Faster**
 - Active giveaways are kept in memory, so a click on "Join" needs no database read.
 - A rush of entries is written to the database once per second instead of once per click.
@@ -229,10 +231,31 @@ module.exports = {
 
 ---
 
+## Downtime, restarts and crashes
+
+Everything about a giveaway lives in the database, so the bot can stop at any moment. On the next start, once both the database and Discord are ready:
+
+| What happened | What the extension does |
+|---|---|
+| The bot restarted | Re-arms every running giveaway for its original end time. Paused giveaways stay paused, with the same time left |
+| A giveaway ended while the bot was offline | Draws and announces it right away. Several overdue giveaways are processed one after another, not all at once. The result card shows the scheduled end time, not the time the bot came back |
+| The bot crashed after drawing winners but before announcing them | Announces them and fires `giveawayEnd`, exactly once. Winners are not drawn again |
+| The bot crashed after saving a new giveaway but before posting its message | Posts the message |
+| Reactions were added or removed while offline (reaction mode) | Counts them: new eligible reactors are entered, entries whose reaction is gone are removed. Also re-checked right before every draw |
+| The entry counters went stale while offline | Refreshes the giveaway messages, a few per second |
+| The database is unreachable at boot | Retries with backoff (1 s up to 60 s). Commands give up after 30 s instead of hanging |
+| A guild is in a Discord outage at the end time | Waits and retries every minute instead of ending with no winners. After a day it ends anyway. If the bot was removed from the guild, it ends right away |
+| The bot is disconnected at the end time | Retries every minute until it is back |
+| A database write fails while ending | Nothing changes: the giveaway keeps running, its timer is re-armed, and the error is logged |
+| The host slept or its clock jumped | Every timer re-checks the real time at least every 30 seconds, so an end is never more than 30 s late |
+| A click arrives while the giveaway is busy | The click is acknowledged within Discord's 3 second limit and answered when ready, so users don't see "This interaction failed" |
+
+What can't be recovered: up to one second of entry clicks if the process is killed hard (see `entryFlushDelay`), and button clicks made while the bot was offline, which Discord rejects on its side.
+
 ## Notes and limits
 
 - Active giveaways are cached in memory, which assumes one bot process owns the giveaway table (the normal setup). Don't point two running bots at the same giveaway database.
-- With the default `entryFlushDelay` of one second, a crash can lose up to the last second of entry clicks. Set it to `0` if that matters more than write volume.
+- With the default `entryFlushDelay` of one second, a hard kill can lose up to the last second of entry clicks. Normal shutdowns (`SIGINT`/`SIGTERM`) save them. Set it to `0` if that matters more than write volume.
 - Bonus entries are counted from the member's roles at the time of the draw when the member is cached, otherwise from the roles they had when they entered.
 - MongoDB support follows the original schema but has not been tested against a live MongoDB server.
 

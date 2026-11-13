@@ -21,6 +21,18 @@ Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways
 - `$getAllGiveaways`, `$newGiveaway` and `$oldGiveaway` required a property although they can return JSON.
 - Requirement checks now report the real reason before "entries full".
 
+### Downtime and crash recovery
+- Ended-while-offline giveaways are drawn on restart one at a time; the result shows the scheduled end time.
+- Results are written with an "announcement pending" marker and announced (and `giveawayEnd` fired) on the next start if the bot died in between, exactly once.
+- A new giveaway is saved before its message is posted; a missing message is posted on restart.
+- Reaction mode re-counts reactions on restart and before each draw.
+- Stale giveaway messages are refreshed on restart.
+- Deadlines during a guild outage or while disconnected are retried every minute (up to a day) instead of ending with no winners; a removed bot ends them right away.
+- A failed database write while ending leaves memory and database consistent and re-arms the timer; life cycle changes are copy-on-write.
+- The scheduler re-checks the wall clock every 30 s (host sleep, clock jumps).
+- Database connection is retried with backoff at boot; calls time out after 30 s instead of hanging.
+- Slow clicks are deferred within Discord's 3 s limit.
+
 ### Security
 - Management functions (`$editGiveaway`, `$endGiveaway`, `$rerollGiveaway`, `$cancelGiveaway`, `$pauseGiveaway`, `$resumeGiveaway`, `$extendGiveaway`, `$shortenGiveaway`, `$addGiveawayEntry`, `$removeGiveawayEntry`, `$deleteGiveaway`) only act on giveaways of the given guild, or the current guild when none is given. `$editGiveaway`'s existing guild argument must now match.
 - Validation for winners, duration, prize and role IDs.

@@ -1,4 +1,4 @@
-import { Guild, GuildMember, Message, Snowflake, User } from "discord.js"
+import { DiscordAPIError, Guild, GuildMember, Message, RESTJSONErrorCodes, Snowflake, User } from "discord.js"
 import { ForgeClient, Logger } from "@tryforge/forgescript"
 import {
     Database,
@@ -12,7 +12,7 @@ import {
 } from "../structures"
 import { format, GiveawayMessages } from "../structures/messages"
 import { GiveawaysErrorType, throwGiveawaysError } from "../functions/error"
-import { chunk, chunkJoin, KeyedMutex, Scheduler, shuffle, weightedOrder } from "../utils"
+import { chunk, chunkJoin, emojiMatches, KeyedMutex, Scheduler, shuffle, weightedOrder } from "../utils"
 import type { ForgeGiveaways } from ".."
 import type { EntryContext } from "../handlers/GiveawaysEventHandler"
 import noop from "../functions/noop"
@@ -36,6 +36,18 @@ export interface IEntryResult {
 }
 
 const MAX_MESSAGE = 2000
+/** How often the scheduler re-checks the wall clock (host sleep, clock jumps). */
+const WATCHDOG_INTERVAL = 30_000
+/** Retry delay when a deadline can't be processed yet (disconnected, guild outage). */
+const RETRY_DELAY = 60_000
+/** After this long past the deadline, end even if the guild is still unavailable. */
+const MAX_POSTPONE = 24 * 36e5
+/** How long a call waits for the database before giving up. */
+const READY_TIMEOUT = 30_000
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.())
+
+type GuildStatus = "ok" | "unavailable" | "gone"
 
 /**
  * Owns the life cycle of every giveaway: start, end, reroll, edit, pause,
@@ -54,13 +66,18 @@ export class GiveawaysManager {
     public readonly scheduler: Scheduler
     public readonly renderer: Renderer
 
+    // Life cycle changes (end, cancel, reroll, edit, extend, pause, resume)
+    // work on a copy that replaces the cached giveaway only once it has been
+    // saved, so a failed write can't leave memory and database disagreeing.
     readonly #lock = new KeyedMutex()
     readonly #flushTimers = new Map<Snowflake, NodeJS.Timeout>()
     readonly #refreshTimers = new Map<Snowflake, NodeJS.Timeout>()
-    #restored = false
     #sweepTimer: NodeJS.Timeout | null = null
     #ready: Promise<void>
     #markReady!: () => void
+    #isReady = false
+    /** Deadlines are processed one at a time so a restart after long downtime doesn't fire everything at once. */
+    #deadlineChain: Promise<unknown> = Promise.resolve()
 
     public constructor(private readonly client: ForgeClient, private readonly giveaways: ForgeGiveaways) {
         const o = giveaways.options
@@ -73,7 +90,16 @@ export class GiveawaysManager {
             colors: o.colors as Required<NonNullable<typeof o.colors>>,
             messages: o.messages as GiveawayMessages,
         })
-        this.scheduler = new Scheduler((id) => this._onDeadline(id).catch(noop))
+        this.scheduler = new Scheduler((id) => {
+            this.#deadlineChain = this.#deadlineChain
+                .then(() => this._onDeadline(id))
+                .catch((e) => {
+                    // e.g. the database was briefly unreachable: try again
+                    // instead of losing the deadline until the next restart.
+                    noop(e)
+                    if (!this.scheduler.has(id)) this.scheduler.schedule(id, Date.now() + RETRY_DELAY)
+                })
+        }, { maxDelay: WATCHDOG_INTERVAL })
         this.#ready = new Promise((res) => (this.#markReady = res))
     }
 
@@ -86,8 +112,27 @@ export class GiveawaysManager {
         return this.#ready
     }
 
+    /**
+     * Waits for the database, but not forever: if it never connects, calls
+     * fail after {@link READY_TIMEOUT} instead of hanging the command.
+     */
+    async #awaitReady() {
+        if (this.#isReady) return
+        let timer: NodeJS.Timeout | undefined
+        const timeout = new Promise<never>((_, rej) => {
+            timer = setTimeout(() => rej(new Error("[ForgeGiveaways] Database is not connected")), READY_TIMEOUT)
+            timer.unref?.()
+        })
+        try {
+            await Promise.race([this.#ready, timeout])
+        } finally {
+            clearTimeout(timer)
+        }
+    }
+
     /** @internal Called by the extension once the database is connected. */
     public _onDatabaseReady() {
+        this.#isReady = true
         this.#markReady()
         const client = this.client as ForgeClient
         if (client.isReady()) this._restore().catch(noop)
@@ -207,7 +252,7 @@ export class GiveawaysManager {
      * @param options The start options for the giveaway.
      */
     public async start(options: IGiveawayStartOptions) {
-        await this.#ready
+        await this.#awaitReady()
         const winnersCount = Math.floor(Number(options.winnersCount))
         const duration = Math.floor(Number(options.duration))
         if (!Number.isFinite(duration) || duration <= 0) throw new RangeError("Giveaway duration must be a positive amount of time")
@@ -217,30 +262,39 @@ export class GiveawaysManager {
 
         const giveaway = Database.create({ ...options, duration, winnersCount, prize: options.prize.trim() })
         if (giveaway.maxEntries != null && !(giveaway.maxEntries >= 1)) giveaway.maxEntries = null
-        const { useDefault } = this.giveaways.options
+        // Persist first, then post. If the bot dies in between, the next start
+        // finds a giveaway without a message and posts it (see _restore);
+        // the other order would leave a message whose button belongs to nothing.
+        return this.#lock.run(giveaway.id, async () => {
+            await Database.set(giveaway)
 
-        if (useDefault) {
-            const chan = await this.getChannel(giveaway.channelID)
-            const ping = giveaway.display?.pingRoleID
-            const msg = await chan?.send({
-                content: ping ? format(this.messages.startPing, { ping: `<@&${ping}>` }) : undefined,
-                ...this.renderer.payload(giveaway),
-                allowedMentions: { parse: [], roles: ping ? [ping] : [] },
-            }).catch(noop)
-
-            if (!msg) {
+            if (this.giveaways.options.useDefault && !(await this.postMessage(giveaway))) {
                 throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, giveaway.id)
+                await Database.delete(giveaway.id).catch(noop)
                 return null
             }
 
-            if (this.giveaways.options.useReactions) await msg.react(this.giveaways.options.emoji!).catch(noop)
-            giveaway.messageID = msg.id
-        }
+            this.schedule(giveaway)
+            this.emit("giveawayStart", giveaway.clone())
+            return giveaway
+        })
+    }
 
-        await Database.set(giveaway)
-        this.schedule(giveaway)
-        this.emit("giveawayStart", giveaway.clone())
-        return giveaway
+    /** Sends the default giveaway message and saves its id. Returns false if it could not be sent. */
+    private async postMessage(giveaway: Giveaway) {
+        const chan = await this.getChannel(giveaway.channelID)
+        const ping = giveaway.display?.pingRoleID
+        const msg = await chan?.send({
+            content: ping ? format(this.messages.startPing, { ping: `<@&${ping}>` }) : undefined,
+            ...this.renderer.payload(giveaway),
+            allowedMentions: { parse: [], roles: ping ? [ping] : [] },
+        }).catch(noop)
+        if (!msg) return false
+
+        if (this.giveaways.options.useReactions) await msg.react(this.giveaways.options.emoji!).catch(noop)
+        giveaway.messageID = msg.id
+        await this.save(giveaway)
+        return true
     }
 
     /**
@@ -267,14 +321,46 @@ export class GiveawaysManager {
     }
 
     /**
-     * Timer path for ending. If the bot is disconnected right at the deadline,
-     * drawing now would find no members and end with no winners, so retry a
-     * minute later instead. Manual `end()` calls are never postponed.
+     * Whether a guild can be used for a draw right now.
+     * - `ok`: available.
+     * - `unavailable`: Discord outage or a network error; worth retrying.
+     * - `gone`: the bot was removed (Unknown Guild / Missing Access).
      */
-    private async _onDeadline(id: Snowflake) {
-        if (!this.client.isReady()) {
-            this.scheduler.schedule(id, Date.now() + 60_000)
+    public async guildStatus(guildID: Snowflake): Promise<GuildStatus> {
+        const cached = this.client.guilds.cache.get(guildID)
+        if (cached) return cached.available ? "ok" : "unavailable"
+        try {
+            const guild = await this.client.guilds.fetch(guildID)
+            return guild.available ? "ok" : "unavailable"
+        } catch (e) {
+            const code = e instanceof DiscordAPIError ? e.code : (e as { code?: unknown })?.code
+            return code === RESTJSONErrorCodes.UnknownGuild || code === RESTJSONErrorCodes.MissingAccess ? "gone" : "unavailable"
+        }
+    }
+
+    /**
+     * Timer path for ending. Drawing while the bot is disconnected or the
+     * guild is in an outage would find no members and end with no winners,
+     * so it retries every minute instead (up to a day past the deadline).
+     * Manual `end()` calls are never postponed.
+     */
+    public async _onDeadline(id: Snowflake) {
+        const giveaway = await Database.get(id).catch(() => null)
+        if (!giveaway || giveaway.hasEnded || giveaway.isPaused()) return null
+        // A deadline moved later (extend) while this one was queued.
+        if (giveaway.endTimestamp() > Date.now()) {
+            this.schedule(giveaway)
             return null
+        }
+
+        const overdue = Date.now() - giveaway.endTimestamp()
+        if (overdue < MAX_POSTPONE) {
+            const status = this.client.isReady() ? await this.guildStatus(giveaway.guildID) : "unavailable"
+            if (status === "unavailable") {
+                Logger.warn(`[ForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`)
+                this.scheduler.schedule(id, Date.now() + RETRY_DELAY)
+                return null
+            }
         }
         return this.end(id)
     }
@@ -284,41 +370,64 @@ export class GiveawaysManager {
      * @param id The id of the giveaway to end.
      */
     public async end(id: Snowflake) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
 
             this.scheduler.cancel(id)
             this.clearTimers(id)
 
-            giveaway.winners = await this.drawWinners(giveaway, giveaway.winnersCount)
-            giveaway.hasEnded = true
-            giveaway.endedAt = Date.now()
-            giveaway.pausedAt = null
-            await this.save(giveaway)
+            // Reactions added or removed while the bot was offline count too.
+            if (this.giveaways.options.useReactions) await this.#syncReactions(giveaway).catch(noop)
 
-            if (this.giveaways.options.useDefault) {
-                const msg = await this.fetchMessage(giveaway.channelID, giveaway.messageID)
-                if (msg) await msg.edit(this.renderer.payload(giveaway)).catch(noop)
-                else throwGiveawaysError(GiveawaysErrorType.MessageNotFound, giveaway.id)
-
-                await this.announce(giveaway, msg, giveaway.winners, "winners")
+            try {
+                giveaway.winners = await this.drawWinners(giveaway, giveaway.winnersCount)
+                giveaway.hasEnded = true
+                giveaway.endedAt = Date.now()
+                giveaway.pausedAt = null
+                giveaway.announcePending = "end"
+                await this.save(giveaway)
+            } catch (e) {
+                // Nothing was saved: the giveaway is still running, keep its timer.
+                const cur = await Database.get(id).catch(() => null)
+                if (cur && !cur.hasEnded) this.schedule(cur)
+                throw e
             }
 
-            if (this.giveaways.options.dmWinners) this.dmWinners(giveaway, giveaway.winners).catch(noop)
-            this.emit("giveawayEnd", giveaway.clone())
+            await this.#publish(giveaway, "end")
             return giveaway
         })
+    }
+
+    /**
+     * Shows the result of an end or reroll: updates the message, announces the
+     * winners, DMs them and fires the event, then clears `announcePending`.
+     * Runs again on the next start if the bot stopped before finishing.
+     */
+    async #publish(giveaway: Giveaway, kind: "end" | "reroll", winners = giveaway.winners, old?: Giveaway) {
+        if (this.giveaways.options.useDefault) {
+            const msg = await this.fetchMessage(giveaway.channelID, giveaway.messageID)
+            if (msg) await msg.edit(this.renderer.payload(giveaway)).catch(noop)
+            else throwGiveawaysError(GiveawaysErrorType.MessageNotFound, giveaway.id)
+            await this.announce(giveaway, msg, winners, kind === "end" ? "winners" : "reroll")
+        }
+
+        if (this.giveaways.options.dmWinners) this.dmWinners(giveaway, winners).catch(noop)
+        if (kind === "end") this.emit("giveawayEnd", giveaway.clone())
+        else this.emit("giveawayReroll", old ?? giveaway.clone(), giveaway.clone())
+
+        giveaway.announcePending = null
+        await this.save(giveaway).catch(noop)
     }
 
     /**
      * Cancels a running giveaway: it ends without winners.
      */
     public async cancel(id: Snowflake) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
 
             this.scheduler.cancel(id)
@@ -328,7 +437,11 @@ export class GiveawaysManager {
             giveaway.endedAt = Date.now()
             giveaway.pausedAt = null
             giveaway.winners = []
-            await this.save(giveaway)
+            await this.save(giveaway).catch(async (e) => {
+                const cur = await Database.get(id).catch(() => null)
+                if (cur && !cur.hasEnded) this.schedule(cur)
+                throw e
+            })
             await this.updateMessage(giveaway)
 
             this.emit("giveawayCancel", giveaway.clone())
@@ -343,9 +456,9 @@ export class GiveawaysManager {
      * @param amount The amount of new winners (defaults to the winners count).
      */
     public async reroll(id: Snowflake, unique: boolean = false, amount?: number) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || !giveaway.hasEnded || giveaway.cancelled || !giveaway.entries.length) return null
             const oldGiveaway = giveaway.clone()
             const count = Math.floor(amount ?? giveaway.winnersCount)
@@ -357,16 +470,10 @@ export class GiveawaysManager {
 
             giveaway.previousWinners = previous
             giveaway.winners = newWinners
+            giveaway.announcePending = "reroll"
             await this.save(giveaway)
 
-            if (this.giveaways.options.useDefault) {
-                const msg = await this.fetchMessage(giveaway.channelID, giveaway.messageID)
-                if (msg) await msg.edit(this.renderer.payload(giveaway)).catch(noop)
-                await this.announce(giveaway, msg, newWinners, "reroll")
-            }
-
-            if (this.giveaways.options.dmWinners) this.dmWinners(giveaway, newWinners).catch(noop)
-            this.emit("giveawayReroll", oldGiveaway, giveaway.clone())
+            await this.#publish(giveaway, "reroll", newWinners, oldGiveaway)
             return giveaway
         })
     }
@@ -377,9 +484,9 @@ export class GiveawaysManager {
      * @param options The options used to edit this giveaway.
      */
     public async edit(id: Snowflake, options: IGiveawayEditOptions) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
             const oldGiveaway = giveaway.clone()
 
@@ -405,10 +512,10 @@ export class GiveawaysManager {
      * Shortening never moves the end before "now"; the giveaway then ends immediately.
      */
     public async extend(id: Snowflake, ms: number) {
-        await this.#ready
+        await this.#awaitReady()
         if (!Number.isFinite(ms) || ms === 0) return null
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
             const oldGiveaway = giveaway.clone()
 
@@ -427,9 +534,9 @@ export class GiveawaysManager {
 
     /** Pauses a running giveaway: the timer stops and nobody can join or leave. */
     public async pause(id: Snowflake) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded || giveaway.isPaused()) return null
 
             giveaway.pausedAt = Date.now()
@@ -443,9 +550,9 @@ export class GiveawaysManager {
 
     /** Resumes a paused giveaway with the time it had left. */
     public async resume(id: Snowflake) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
-            const giveaway = await Database.get(id)
+            const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || !giveaway.isPaused()) return null
 
             giveaway.duration += Date.now() - giveaway.pausedAt!
@@ -467,7 +574,7 @@ export class GiveawaysManager {
      * Used by the button handler.
      */
     public async toggleEntry(id: Snowflake, member: GuildMember | Parameters<Giveaway["canEnter"]>[0], source: EntryContext, user: User): Promise<IEntryResult | null> {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
             const giveaway = await Database.get(id)
             if (!giveaway) return null
@@ -488,7 +595,7 @@ export class GiveawaysManager {
 
     /** Adds a member's entry (used by reactions). */
     public async join(id: Snowflake, member: GuildMember, source: EntryContext, user: User) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
             const giveaway = await Database.get(id)
             if (!giveaway) return null
@@ -517,7 +624,7 @@ export class GiveawaysManager {
      * @param force Also remove entries while paused or ended.
      */
     public async leave(id: Snowflake, userID: Snowflake, source?: EntryContext, user?: User, force = false) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
             const giveaway = await Database.get(id)
             if (!giveaway || (!force && !giveaway.isActive()) || !giveaway.hasEntered(userID)) return null
@@ -535,7 +642,7 @@ export class GiveawaysManager {
      * @param bypassRequirements Skip requirement checks (still respects ended state).
      */
     public async addEntry(id: Snowflake, userID: Snowflake, bypassRequirements = false) {
-        await this.#ready
+        await this.#awaitReady()
         return this.#lock.run(id, async () => {
             const giveaway = await Database.get(id)
             if (!giveaway || giveaway.hasEnded || giveaway.hasEntered(userID)) return null
@@ -661,11 +768,40 @@ export class GiveawaysManager {
     // Start-up and maintenance
     // ----------------------------------------------------------------------
 
-    /** @internal Restores timers for active giveaways after a restart. */
-    public async _restore() {
-        if (this.#restored) return
-        this.#restored = true
-        for (const g of Database.activeGiveaways()) this.schedule(g)
+    /**
+     * @internal Recovers after a (re)start. Runs once, when both the database
+     * and the gateway are ready:
+     * 1. announces results that were drawn but never announced (crash mid-end),
+     * 2. re-arms every active giveaway; ones that ended during downtime are
+     *    processed right away, one by one,
+     * 3. in the background: posts messages that were never sent (crash
+     *    mid-start), refreshes the others (live entry count went stale while
+     *    offline) and, in reaction mode, counts reactions made while offline.
+     */
+    public _restore() {
+        return (this.#restoring ??= this.#doRestore())
+    }
+
+    #restoring: Promise<void> | null = null
+
+    async #doRestore() {
+
+        const pending = await Database.findPendingAnnouncements().catch((e) => { noop(e); return [] as Giveaway[] })
+        for (const g of pending) {
+            await this.#lock.run(g.id, async () => {
+                const cur = await Database.get(g.id)
+                if (cur?.announcePending) await this.#publish(cur, cur.announcePending)
+            }).catch(noop)
+        }
+
+        const active = Database.activeGiveaways()
+        for (const g of active) this.schedule(g)
+        const overdue = active.filter((g) => !g.isPaused() && g.endTimestamp() <= Date.now()).length
+        Logger.info(`[ForgeGiveaways] Restored ${active.length} active giveaway(s)` +
+            (overdue ? `, ${overdue} ended while offline and will be drawn now` : "") +
+            (pending.length ? `, re-announced ${pending.length} result(s)` : ""))
+
+        this.#repairChain = this.#repairMessages(active.filter((g) => g.isPaused() || g.endTimestamp() > Date.now())).catch(noop)
 
         const keep = this.giveaways.options.deleteEndedAfter
         if (keep && keep > 0) {
@@ -673,7 +809,85 @@ export class GiveawaysManager {
             this.#sweepTimer = setInterval(() => this.sweep(keep).catch(noop), Math.min(keep, 6 * 36e5))
             this.#sweepTimer.unref?.()
         }
-        Logger.info(`[ForgeGiveaways] Restored ${this.scheduler.size} active giveaway(s)`)
+    }
+
+    #repairChain: Promise<void> = Promise.resolve()
+
+    /** @internal Resolves when the background message repair after a restart is done. */
+    public _whenRepaired() {
+        return this.#repairChain
+    }
+
+    async #repairMessages(giveaways: Giveaway[]) {
+        const { useDefault, useReactions } = this.giveaways.options
+        for (const g of giveaways) {
+            await this.#lock.run(g.id, async () => {
+                const cur = await Database.get(g.id)
+                if (!cur || cur.hasEnded) return
+
+                if (useDefault && !cur.messageID) {
+                    if (await this.postMessage(cur)) Logger.info(`[ForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
+                    else throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, cur.id)
+                    return
+                }
+
+                if (useReactions) await this.#syncReactions(cur)
+                if (useDefault) await this.updateMessage(cur)
+            }).catch(noop)
+            await sleep(250) // stay well clear of rate limits on large restores
+        }
+    }
+
+    /**
+     * Makes the entries match the reactions on the giveaway message: adds
+     * eligible people who reacted while the bot was offline (and removes the
+     * reaction of those who don't qualify) and drops entries whose reaction is
+     * gone. Call inside the giveaway's lock.
+     */
+    async #syncReactions(g: Giveaway) {
+        const msg = await this.fetchMessage(g.channelID, g.messageID)
+        const reaction = msg?.reactions.cache.find((r) => emojiMatches(r.emoji, this.giveaways.options.emoji!))
+        // No message or no reaction at all is more likely a permission problem
+        // than everybody leaving; don't wipe entries on that.
+        if (!reaction) return
+
+        const reactors = new Set<string>()
+        let after: string | undefined
+        for (;;) {
+            const page = await reaction.users.fetch({ limit: 100, after })
+            for (const [id, user] of page) if (!user.bot) reactors.add(id)
+            if (page.size < 100) break
+            after = page.lastKey()
+        }
+
+        let changed = false
+        for (const id of [...g.entries]) {
+            if (!reactors.has(id)) {
+                g.removeEntry(id)
+                changed = true
+            }
+        }
+
+        const newcomers = [...reactors].filter((id) => !g.hasEntered(id))
+        if (newcomers.length) {
+            const guild = await this.getGuild(g.guildID)
+            if (guild) {
+                for (const batch of chunk(newcomers, 100)) {
+                    const members = await this.fetchMembers(guild, batch)
+                    for (const id of batch) {
+                        const m = members.get(id)
+                        if (m && !g.requirementDenyReason(m, true)) {
+                            g.addEntry(id, g.computeWeight(m))
+                            changed = true
+                        } else {
+                            reaction.users.remove(id).catch(noop)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (changed) await this.save(g)
     }
 
     /** Deletes giveaways that ended more than `olderThan` ms ago. Returns how many. */

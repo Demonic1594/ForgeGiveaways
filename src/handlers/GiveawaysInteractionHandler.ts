@@ -6,6 +6,9 @@ import { denyReasonText, format, GiveawayMessages } from "../structures/messages
 import { GiveawaysErrorType, throwGiveawaysError } from "../functions/error"
 import noop from "../functions/noop"
 
+/** Acknowledge a click that takes longer than this (Discord allows 3 s). */
+const DEFER_AFTER = 2000
+
 /**
  * Handles clicks on the giveaway entry button (custom id `giveawayEntry`,
  * optionally followed by `-anything`). Clicking toggles the entry.
@@ -24,9 +27,12 @@ export class GiveawaysInteractionHandler {
         const ext = this.client.getExtension(ForgeGiveaways, true)
         const { useDefault } = ext.options
         const m = ext.options.messages as GiveawayMessages
-        const reply = (content: string) => useDefault
-            ? interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(noop)
-            : undefined
+        let deferred = false
+        const reply = (content: string) => !useDefault
+            ? undefined
+            : deferred
+                ? interaction.editReply({ content, allowedMentions: { parse: [] } }).catch(noop)
+                : interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(noop)
 
         if (!Database.ready) return reply(m.notReady)
 
@@ -39,7 +45,21 @@ export class GiveawaysInteractionHandler {
         if (giveaway.isPaused()) return reply(m.paused)
 
         const user = interaction.user as User
-        const result = await ext.giveawaysManager.toggleEntry(giveaway.id, interaction.member, interaction, user)
+        const work = ext.giveawaysManager.toggleEntry(giveaway.id, interaction.member, interaction, user)
+
+        // Discord drops a click that isn't answered within 3 seconds. If the
+        // giveaway is busy (e.g. being drawn), acknowledge first, answer later.
+        if (useDefault) {
+            let timer: NodeJS.Timeout | undefined
+            const slow = await Promise.race([
+                work.then(() => false, () => false),
+                new Promise<boolean>((r) => { timer = setTimeout(() => r(true), DEFER_AFTER) }),
+            ])
+            clearTimeout(timer)
+            if (slow) deferred = !!(await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(noop))
+        }
+
+        const result = await work
         if (!result) return reply(m.unknown)
 
         switch (result.action) {

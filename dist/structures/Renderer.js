@@ -67,6 +67,15 @@ class Renderer {
         ...(this.opts.showEntryCount ? [{ name: "Entries", value: `${g.entries.length}`, inline: true }] : []))
             .setFooter({ text: (0, utils_1.truncate)(paused ? m.pausedFooter : (0, messages_1.format)(m.footer, { entryMethod }), 2048) });
     }
+    /**
+     * When the giveaway is shown as having ended: the actual end for early
+     * ends and cancels, but the scheduled end if the draw happened late
+     * because the bot was offline, so downtime doesn't change the result card.
+     */
+    #shownEnd(g) {
+        const ended = g.endedAt ?? Date.now();
+        return g.cancelled ? ended : Math.min(ended, g.endTimestamp());
+    }
     /** Embed for an ended or cancelled giveaway. */
     endedEmbed(g) {
         const m = this.opts.messages;
@@ -78,8 +87,8 @@ class Renderer {
         return this.#base(g, g.cancelled ? this.opts.colors.cancelled : this.opts.colors.ended)
             .setTitle(g.cancelled ? m.cancelledTitle : m.endedTitle)
             .setDescription((0, utils_1.truncate)(lines.join("\n"), 4096))
-            .setFields({ name: "Ended", value: `${(0, discord_js_1.time)(Math.floor((g.endedAt ?? Date.now()) / 1000), "R")}`, inline: true }, { name: "Hosted by", value: `<@${g.hostID}>`, inline: true })
-            .setTimestamp(g.endedAt ?? Date.now())
+            .setFields({ name: "Ended", value: `${(0, discord_js_1.time)(Math.floor(this.#shownEnd(g) / 1000), "R")}`, inline: true }, { name: "Hosted by", value: `<@${g.hostID}>`, inline: true })
+            .setTimestamp(this.#shownEnd(g))
             .setFooter({ text: (0, utils_1.truncate)(g.cancelled ? m.cancelledFooter : m.endedFooter, 2048) });
     }
     /** Entry button row, or nothing when reactions are used or the giveaway ended. */

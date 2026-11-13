@@ -84,6 +84,16 @@ export class Renderer {
             .setFooter({ text: truncate(paused ? m.pausedFooter : format(m.footer, { entryMethod }), 2048) })
     }
 
+    /**
+     * When the giveaway is shown as having ended: the actual end for early
+     * ends and cancels, but the scheduled end if the draw happened late
+     * because the bot was offline, so downtime doesn't change the result card.
+     */
+    #shownEnd(g: Giveaway) {
+        const ended = g.endedAt ?? Date.now()
+        return g.cancelled ? ended : Math.min(ended, g.endTimestamp())
+    }
+
     /** Embed for an ended or cancelled giveaway. */
     public endedEmbed(g: Giveaway) {
         const m = this.opts.messages
@@ -96,10 +106,10 @@ export class Renderer {
             .setTitle(g.cancelled ? m.cancelledTitle : m.endedTitle)
             .setDescription(truncate(lines.join("\n"), 4096))
             .setFields(
-                { name: "Ended", value: `${time(Math.floor((g.endedAt ?? Date.now()) / 1000), "R")}`, inline: true },
+                { name: "Ended", value: `${time(Math.floor(this.#shownEnd(g) / 1000), "R")}`, inline: true },
                 { name: "Hosted by", value: `<@${g.hostID}>`, inline: true },
             )
-            .setTimestamp(g.endedAt ?? Date.now())
+            .setTimestamp(this.#shownEnd(g))
             .setFooter({ text: truncate(g.cancelled ? m.cancelledFooter : m.endedFooter, 2048) })
     }
 

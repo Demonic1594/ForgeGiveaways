@@ -71,6 +71,7 @@ function columns(driver: DriverKind) {
         bonusEntries: obj(),
         maxEntries: { type: "int", nullable: true },
         display: obj(),
+        announcePending: mongo ? { type: String, nullable: true } : { type: "varchar", length: 16, nullable: true },
     }
 
     if (mongo) cols.mongoId = { type: "objectId" as any, objectId: true, primary: true }

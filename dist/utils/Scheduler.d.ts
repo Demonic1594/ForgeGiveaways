@@ -5,6 +5,15 @@
  */
 export declare const MAX_TIMER_DELAY: number;
 export type SchedulerCallback = (key: string) => unknown;
+export interface ISchedulerOptions {
+    /**
+     * Longest the timer sleeps before re-checking the wall clock. Node timers
+     * run on a monotonic clock that stops while the host is suspended and
+     * ignores clock corrections, so without a cap a deadline could fire hours
+     * late after a VM pause or NTP jump. Defaults to {@link MAX_TIMER_DELAY}.
+     */
+    maxDelay?: number;
+}
 /**
  * A single-timer deadline scheduler with no upper bound on how far in the
  * future a deadline may be.
@@ -18,7 +27,7 @@ export type SchedulerCallback = (key: string) => unknown;
 export declare class Scheduler {
     #private;
     private readonly callback;
-    constructor(callback: SchedulerCallback);
+    constructor(callback: SchedulerCallback, options?: ISchedulerOptions);
     /** Number of pending deadlines. */
     get size(): number;
     /** Returns the deadline of a key, if scheduled. */

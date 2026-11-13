@@ -9,6 +9,7 @@ const discord_js_1 = require("discord.js");
 const __1 = require("..");
 const structures_1 = require("../structures");
 const noop_1 = __importDefault(require("../functions/noop"));
+const utils_1 = require("../utils");
 /**
  * Handles reaction based entries. Reacting joins, removing the reaction
  * leaves. Members who don't meet the requirements get their reaction removed.
@@ -28,9 +29,7 @@ class GiveawaysReactionHandler {
         return this.client.getExtension(__1.ForgeGiveaways, true);
     }
     matches(reaction) {
-        const want = this.ext.options.emoji;
-        const { emoji } = reaction;
-        return emoji.name === want || emoji.id === want || emoji.toString() === want;
+        return (0, utils_1.emojiMatches)(reaction.emoji, this.ext.options.emoji);
     }
     async add(reaction, user) {
         if (user.bot || !structures_1.Database.ready || !this.matches(reaction))

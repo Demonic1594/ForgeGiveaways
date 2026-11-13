@@ -23,8 +23,10 @@ class Scheduler {
     #timer = null;
     #armedFor = Infinity;
     #running = false;
-    constructor(callback) {
+    #maxDelay;
+    constructor(callback, options = {}) {
         this.callback = callback;
+        this.#maxDelay = Math.min(Math.max(options.maxDelay ?? exports.MAX_TIMER_DELAY, 1), exports.MAX_TIMER_DELAY);
     }
     /** Number of pending deadlines. */
     get size() {
@@ -74,8 +76,10 @@ class Scheduler {
         for (const at of this.#deadlines.values())
             if (at < next)
                 next = at;
-        const delay = Math.min(Math.max(next - Date.now(), 0), exports.MAX_TIMER_DELAY);
-        this.#armedFor = next;
+        const delay = Math.min(Math.max(next - Date.now(), 0), this.#maxDelay);
+        // Remember when we will actually wake up, so an earlier deadline
+        // scheduled meanwhile still re-arms the timer.
+        this.#armedFor = Math.min(next, Date.now() + delay);
         this.#timer = setTimeout(() => this.#tick(), delay);
         this.#timer.unref?.();
     }

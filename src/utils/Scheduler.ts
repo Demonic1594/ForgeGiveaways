@@ -7,6 +7,16 @@ export const MAX_TIMER_DELAY = 2 ** 31 - 1
 
 export type SchedulerCallback = (key: string) => unknown
 
+export interface ISchedulerOptions {
+    /**
+     * Longest the timer sleeps before re-checking the wall clock. Node timers
+     * run on a monotonic clock that stops while the host is suspended and
+     * ignores clock corrections, so without a cap a deadline could fire hours
+     * late after a VM pause or NTP jump. Defaults to {@link MAX_TIMER_DELAY}.
+     */
+    maxDelay?: number
+}
+
 /**
  * A single-timer deadline scheduler with no upper bound on how far in the
  * future a deadline may be.
@@ -23,7 +33,11 @@ export class Scheduler {
     #armedFor = Infinity
     #running = false
 
-    public constructor(private readonly callback: SchedulerCallback) {}
+    readonly #maxDelay: number
+
+    public constructor(private readonly callback: SchedulerCallback, options: ISchedulerOptions = {}) {
+        this.#maxDelay = Math.min(Math.max(options.maxDelay ?? MAX_TIMER_DELAY, 1), MAX_TIMER_DELAY)
+    }
 
     /** Number of pending deadlines. */
     public get size() {
@@ -75,8 +89,10 @@ export class Scheduler {
         let next = Infinity
         for (const at of this.#deadlines.values()) if (at < next) next = at
 
-        const delay = Math.min(Math.max(next - Date.now(), 0), MAX_TIMER_DELAY)
-        this.#armedFor = next
+        const delay = Math.min(Math.max(next - Date.now(), 0), this.#maxDelay)
+        // Remember when we will actually wake up, so an earlier deadline
+        // scheduled meanwhile still re-arms the timer.
+        this.#armedFor = Math.min(next, Date.now() + delay)
         this.#timer = setTimeout(() => this.#tick(), delay)
         this.#timer.unref?.()
     }

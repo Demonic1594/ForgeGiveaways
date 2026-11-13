@@ -59,6 +59,8 @@ export declare class Database extends GiveawaysDatabaseManager {
      * Gets a giveaway by the message it is attached to.
      */
     static getByMessage(messageID: Snowflake, channelID?: Snowflake): Promise<Giveaway | null>;
+    /** Ended giveaways whose result was never announced (the bot stopped mid-way). */
+    static findPendingAnnouncements(): Promise<Giveaway[]>;
     /** Gets all existing giveaways. */
     static getAll(): Promise<Giveaway[]>;
     /**

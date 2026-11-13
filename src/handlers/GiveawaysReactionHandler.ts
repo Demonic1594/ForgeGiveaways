@@ -3,6 +3,7 @@ import { MessageReaction, PartialMessageReaction, PartialUser, Partials, User } 
 import { ForgeGiveaways } from ".."
 import { Database } from "../structures"
 import noop from "../functions/noop"
+import { emojiMatches } from "../utils"
 
 /**
  * Handles reaction based entries. Reacting joins, removing the reaction
@@ -24,9 +25,7 @@ export class GiveawaysReactionHandler {
     }
 
     private matches(reaction: MessageReaction | PartialMessageReaction) {
-        const want = this.ext.options.emoji!
-        const { emoji } = reaction
-        return emoji.name === want || emoji.id === want || emoji.toString() === want
+        return emojiMatches(reaction.emoji, this.ext.options.emoji!)
     }
 
     private async add(reaction: MessageReaction | PartialMessageReaction, user: User | PartialUser) {

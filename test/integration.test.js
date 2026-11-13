@@ -8,9 +8,9 @@ const { execFileSync } = require("child_process")
 
 const DAY = 864e5
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "forge-giveaways-"))
-const phase = (dir, name) => {
-    const stdout = execFileSync(process.execPath, [path.join(__dirname, "fixtures/phase.js"), dir, name], { encoding: "utf8" })
-    return JSON.parse(stdout.trim().split("\n").pop())
+const phase = (dir, name, arg = "") => {
+    const stdout = execFileSync(process.execPath, [path.join(__dirname, "fixtures/phase.js"), dir, name, arg], { encoding: "utf8" })
+    return JSON.parse(stdout.trim().split("\n").filter((l) => l.startsWith("{")).pop())
 }
 
 test("a 400 day giveaway survives a restart with its entries and end time", () => {
@@ -80,16 +80,28 @@ test("full life cycle against a real database", async (t) => {
     assert.equal(manager.scheduler.has(g.id), false)
     assert.equal((await manager.toggleEntry(g.id, leaver, {}, leaver.user)).reason, GiveawayDenyReason.Paused)
     await new Promise((r) => setTimeout(r, 30))
-    await manager.resume(g.id)
-    assert.ok(g.duration >= 60 * DAY + 30, "paused time is added back")
-    const before = g.endTimestamp()
-    await manager.extend(g.id, DAY)
-    assert.equal(g.endTimestamp(), before + DAY)
-    assert.equal(manager.scheduler.get(g.id), g.endTimestamp())
+    const resumed = await manager.resume(g.id)
+    assert.ok(resumed.duration >= 60 * DAY + 30, "paused time is added back")
+    const before = resumed.endTimestamp()
+    const extended = await manager.extend(g.id, DAY)
+    assert.equal(extended.endTimestamp(), before + DAY)
+    assert.equal(manager.scheduler.get(g.id), extended.endTimestamp())
+    assert.equal((await Database.get(g.id)).endTimestamp(), before + DAY, "cache holds the saved copy")
 
     // One winner loses the role before the end: they must not win.
     const dropped = qualified.find((m) => g.hasEntered(m.id))
     dropped.roles = []
+
+    // A failed database write while ending leaves the giveaway running and scheduled.
+    const realSet = Database.set
+    Database.set = async function (x) {
+        if (x.hasEnded) throw new Error("disk full")
+        return realSet.call(this, x)
+    }
+    await assert.rejects(manager.end(g.id), /disk full/)
+    Database.set = realSet
+    assert.equal((await Database.get(g.id)).hasEnded, false, "memory still matches the database")
+    assert.ok(manager.scheduler.has(g.id), "timer re-armed")
 
     const ended = await manager.end(g.id)
     assert.equal(ended.winners.length, 3)
@@ -167,23 +179,78 @@ test("README examples and every new function compile", async () => {
     }
 })
 
-test("a deadline hit while disconnected is retried, not ended without winners", async () => {
-    const { Scheduler } = require("..")
+test("a deadline hit during a guild outage is retried, not ended without winners", async () => {
+    const { Scheduler, GiveawaysManager, Giveaway, Database } = require("..")
     const { mock } = require("node:test")
-    const manager = Object.create(require("..").GiveawaysManager.prototype)
+    const manager = Object.create(GiveawaysManager.prototype)
     let ended = 0
-    Object.assign(manager, { client: { isReady: () => false }, end: async () => { ended++ } })
+    let status = "unavailable"
+    const g = new Giveaway({ prize: "p", duration: 1000 })
+    Object.assign(manager, { client: { isReady: () => true }, end: async () => { ended++ }, guildStatus: async () => status, schedule() {} })
     manager.scheduler = new Scheduler(() => {})
-    mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1_000 })
+    const realGet = Database.get
+    Database.get = async () => g
+    mock.timers.enable({ apis: ["setTimeout", "Date"], now: g.endTimestamp() + 5 })
     try {
-        await manager._onDeadline("x")
-        assert.equal(ended, 0)
-        assert.equal(manager.scheduler.get("x"), 61_000)
-        manager.client.isReady = () => true
-        await manager._onDeadline("x")
+        await manager._onDeadline(g.id)
+        assert.equal(ended, 0, "not drawn while the guild is unavailable")
+        assert.equal(manager.scheduler.get(g.id), Date.now() + 60_000, "retried in a minute")
+
+        status = "gone" // bot was removed from the guild: end anyway
+        await manager._onDeadline(g.id)
         assert.equal(ended, 1)
+
+        status = "unavailable" // an outage longer than a day: stop waiting
+        mock.timers.setTime(g.endTimestamp() + 25 * 36e5)
+        await manager._onDeadline(g.id)
+        assert.equal(ended, 2)
+
+        manager.client.isReady = () => false // disconnected
+        mock.timers.setTime(g.endTimestamp() + 5)
+        await manager._onDeadline(g.id)
+        assert.equal(ended, 2)
     } finally {
+        Database.get = realGet
         manager.scheduler.clear()
         mock.timers.reset()
     }
+})
+
+test("a giveaway that ended while the bot was offline is drawn and announced on restart", async () => {
+    const dir = tmp()
+    const s = phase(dir, "startShort")
+    await new Promise((r) => setTimeout(r, 1800)) // the bot is "down" past the deadline
+    const r = phase(dir, "restartAfterEnd", s.id)
+    assert.ok(r.ended)
+    assert.equal(r.winners.length, 1)
+    assert.ok(s.users.includes(r.winners[0]))
+    assert.equal(r.pending, null)
+    assert.equal(r.announced, 1)
+    assert.equal(r.endEvents, 1)
+})
+
+test("a crash between drawing and announcing is finished on restart, exactly once", () => {
+    const dir = tmp()
+    const s = phase(dir, "crashMidEnd")
+    const r = phase(dir, "restartAfterCrash", s.id)
+    assert.equal(r.pending, null)
+    assert.deepEqual(r.announced, [[s.winner]])
+    assert.equal(r.endEvents, 1)
+    const again = phase(dir, "restartAfterCrash", s.id)
+    assert.deepEqual(again.announced, [], "not announced twice")
+})
+
+test("a crash between saving and posting a giveaway posts the message on restart", () => {
+    const dir = tmp()
+    const s = phase(dir, "crashMidStart")
+    const r = phase(dir, "restartAfterStartCrash", s.id)
+    assert.ok(r.messageID)
+    assert.equal(r.posted, 1)
+})
+
+test("reaction mode counts reactions added and removed while offline", () => {
+    const r = phase(tmp(), "reactions")
+    assert.deepEqual(r.entries, r.expected, "entries match the reactions (bots ignored)")
+    assert.deepEqual(r.winners, r.expected)
+    assert.ok(!r.winners.includes(r.left))
 })

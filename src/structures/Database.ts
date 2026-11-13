@@ -3,7 +3,7 @@ import type { IGiveawayEvents } from "../handlers/GiveawaysEventHandler"
 import { TypedEmitter } from "tiny-typed-emitter"
 import { TransformEvents } from "@tryforge/forge.db"
 import { Snowflake } from "discord.js"
-import { DataSource, EntitySchema, Repository } from "typeorm"
+import { DataSource, EntitySchema, In, Repository } from "typeorm"
 import { Giveaway, IGiveaway, MongoGiveaway } from "./Giveaway"
 import { createGiveawaySchema, DriverKind } from "./schema"
 
@@ -142,6 +142,13 @@ export class Database extends GiveawaysDatabaseManager {
         const where: Record<string, string> = { messageID }
         if (channelID) where.channelID = channelID
         return (await this.repo().findOne({ where: where as any })) ?? null
+    }
+
+    /** Ended giveaways whose result was never announced (the bot stopped mid-way). */
+    public static async findPendingAnnouncements() {
+        const kinds = ["end", "reroll"]
+        const where = this.driver === "mongodb" ? { announcePending: { $in: kinds } } : { announcePending: In(kinds) }
+        return await this.repo().find({ where: where as any })
     }
 
     /** Gets all existing giveaways. */

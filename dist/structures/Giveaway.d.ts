@@ -1,5 +1,6 @@
 import { APIInteractionGuildMember, GuildMember, Snowflake } from "discord.js";
 export type RequiredRolesMode = "all" | "any";
+export type AnnounceKind = "end" | "reroll";
 export interface IGiveawayRequirements {
     /** Roles a member must have (see {@link requiredRolesMode}). */
     requiredRoles?: Snowflake[];
@@ -114,6 +115,12 @@ export declare class Giveaway implements IGiveaway {
     maxEntries?: number | null;
     /** Presentation options for the default messages. */
     display?: IGiveawayDisplay | null;
+    /**
+     * Set in the same write that ends or rerolls the giveaway and cleared once
+     * the result was announced. If the bot dies in between, the announcement
+     * is made on the next start instead of being lost.
+     */
+    announcePending?: AnnounceKind | null;
     constructor(options?: Partial<IGiveawayStartOptions> & {
         id?: Snowflake;
     });

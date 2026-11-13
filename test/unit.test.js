@@ -190,3 +190,60 @@ test("pause freezes time, clone keeps methods and is independent", () => {
     assert.equal(json.isPaused, true)
     assert.equal(json.endTimestamp, g.timestamp + 10 * DAY)
 })
+
+test("scheduler watchdog catches up after the host slept or the clock jumped", () => {
+    // Timers are mocked on their own (monotonic time) and Date.now separately
+    // (wall clock), so a wall-clock jump can be simulated without the timers seeing it.
+    const realNow = Date.now
+    let wall = 1_000_000
+    Date.now = () => wall
+    mock.timers.enable({ apis: ["setTimeout"] })
+    try {
+        const run = (opts) => {
+            const fired = []
+            const s = new Scheduler((k) => fired.push(k), opts)
+            s.schedule("g", wall + 10 * 60_000)
+            wall += 10 * 60_000 // host slept 10 minutes: wall clock moved, timers did not
+            mock.timers.tick(30_000)
+            s.clear()
+            wall -= 10 * 60_000
+            return fired.length
+        }
+        assert.equal(run({}), 0, "without the watchdog the deadline is missed")
+        assert.equal(run({ maxDelay: 30_000 }), 1, "with it, it fires within 30 s")
+    } finally {
+        mock.timers.reset()
+        Date.now = realNow
+    }
+})
+
+test("a slow click is acknowledged in time and answered afterwards", async () => {
+    const { GiveawaysInteractionHandler, Database, DEFAULT_MESSAGES, Giveaway } = require("../dist")
+    const g = new Giveaway({ prize: "Nitro", duration: DAY })
+    const calls = []
+    const interaction = {
+        message: { id: "1" }, channelId: "2", member: { user: { id: "3" } }, user: { id: "3" },
+        reply: async (p) => calls.push(["reply", p.content]),
+        deferReply: async () => { calls.push(["defer"]); return {} },
+        editReply: async (p) => calls.push(["edit", p.content]),
+    }
+    const ext = {
+        options: { useDefault: true, messages: DEFAULT_MESSAGES },
+        giveawaysManager: { toggleEntry: () => new Promise((r) => setTimeout(() => r({ action: "added", giveaway: g }), 2300)) },
+    }
+    const handler = Object.create(GiveawaysInteractionHandler.prototype)
+    handler.client = { getExtension: () => ext }
+
+    const desc = Object.getOwnPropertyDescriptor(Database, "ready")
+    const realGet = Database.getByMessage
+    Object.defineProperty(Database, "ready", { get: () => true, configurable: true })
+    Database.getByMessage = async () => g
+    try {
+        await handler.handle(interaction)
+    } finally {
+        Object.defineProperty(Database, "ready", desc)
+        Database.getByMessage = realGet
+    }
+    assert.deepEqual(calls.map((c) => c[0]), ["defer", "edit"])
+    assert.match(calls[1][1], /joined the giveaway for \*\*Nitro\*\*/)
+})

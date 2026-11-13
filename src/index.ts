@@ -109,8 +109,27 @@ export class ForgeGiveaways extends ForgeExtension {
         this.giveawaysManager = new GiveawaysManager(client, this)
         if (this.options.handleSignals) this.#handleSignals()
 
-        await new Database(this.emitter).init()
+        await this.#connect()
         this.giveawaysManager._onDatabaseReady()
+    }
+
+    /**
+     * Connects to the database, retrying with backoff (1 s up to 60 s) if it is
+     * unreachable at boot, instead of failing once and leaving every giveaway
+     * function waiting forever.
+     */
+    async #connect() {
+        for (let attempt = 0; ; attempt++) {
+            try {
+                await new Database(this.emitter).init()
+                if (attempt) Logger.info(`[ForgeGiveaways] Database connected after ${attempt + 1} attempts`)
+                return
+            } catch (e) {
+                const wait = Math.min(1000 * 2 ** attempt, 60_000)
+                Logger.error(`[ForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
+                await new Promise((r) => setTimeout(r, wait))
+            }
+        }
     }
 
     #handleSignals() {

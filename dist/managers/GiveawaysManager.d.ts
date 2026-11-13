@@ -19,6 +19,7 @@ export interface IEntryResult {
     reason?: GiveawayDenyReason;
     giveaway: Giveaway;
 }
+type GuildStatus = "ok" | "unavailable" | "gone";
 /**
  * Owns the life cycle of every giveaway: start, end, reroll, edit, pause,
  * resume, extend, cancel and entries.
@@ -70,6 +71,8 @@ export declare class GiveawaysManager {
      * @param options The start options for the giveaway.
      */
     start(options: IGiveawayStartOptions): Promise<Giveaway | null>;
+    /** Sends the default giveaway message and saves its id. Returns false if it could not be sent. */
+    private postMessage;
     /**
      * Links a custom start message to a giveaway (used by the `giveawayStart`
      * event when default messages are disabled).
@@ -78,11 +81,19 @@ export declare class GiveawaysManager {
     /** Removes a giveaway and its timers without announcing anything. */
     discard(id: Snowflake): Promise<import("typeorm").DeleteResult>;
     /**
-     * Timer path for ending. If the bot is disconnected right at the deadline,
-     * drawing now would find no members and end with no winners, so retry a
-     * minute later instead. Manual `end()` calls are never postponed.
+     * Whether a guild can be used for a draw right now.
+     * - `ok`: available.
+     * - `unavailable`: Discord outage or a network error; worth retrying.
+     * - `gone`: the bot was removed (Unknown Guild / Missing Access).
      */
-    private _onDeadline;
+    guildStatus(guildID: Snowflake): Promise<GuildStatus>;
+    /**
+     * Timer path for ending. Drawing while the bot is disconnected or the
+     * guild is in an outage would find no members and end with no winners,
+     * so it retries every minute instead (up to a day past the deadline).
+     * Manual `end()` calls are never postponed.
+     */
+    _onDeadline(id: Snowflake): Promise<Giveaway | null>;
     /**
      * Ends an existing giveaway and draws the winners.
      * @param id The id of the giveaway to end.
@@ -142,8 +153,19 @@ export declare class GiveawaysManager {
     private fetchMembers;
     private announce;
     private dmWinners;
-    /** @internal Restores timers for active giveaways after a restart. */
+    /**
+     * @internal Recovers after a (re)start. Runs once, when both the database
+     * and the gateway are ready:
+     * 1. announces results that were drawn but never announced (crash mid-end),
+     * 2. re-arms every active giveaway; ones that ended during downtime are
+     *    processed right away, one by one,
+     * 3. in the background: posts messages that were never sent (crash
+     *    mid-start), refreshes the others (live entry count went stale while
+     *    offline) and, in reaction mode, counts reactions made while offline.
+     */
     _restore(): Promise<void>;
+    /** @internal Resolves when the background message repair after a restart is done. */
+    _whenRepaired(): Promise<void>;
     /** Deletes giveaways that ended more than `olderThan` ms ago. Returns how many. */
     sweep(olderThan: number): Promise<number>;
     /** Stops all timers and writes pending changes. */
