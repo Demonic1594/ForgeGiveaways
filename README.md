@@ -1,8 +1,8 @@
-# ForgeGiveaways 2.0.0 (community fork)
+# ReForgeGiveaways 2.0.0
 
 A giveaway extension for [ForgeScript](https://github.com/tryforge/ForgeScript): start, end, reroll, edit, pause, resume, extend and cancel giveaways, with role requirements, account and membership age gates, bonus entries, entry caps and fully customizable default messages.
 
-This is a modified fork of [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) by xNickyDev, forked at upstream commit `586fb15` (version 1.1.0). It is licensed under the GNU GPL v3, like the original (see [LICENSE](LICENSE)). Modifications were made in November 2026; [CHANGELOG.md](CHANGELOG.md) lists them.
+ReForgeGiveaways is a modified fork of [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) by xNickyDev, forked at upstream commit `586fb15` (version 1.1.0). It is licensed under the GNU GPL v3, like the original (see [LICENSE](LICENSE)). Modifications were made in November 2026; [CHANGELOG.md](CHANGELOG.md) lists them.
 
 ---
 
@@ -46,21 +46,21 @@ Existing databases are upgraded in place on first start. Function names and argu
 
 ## Installation
 
-ForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extension.
+ReForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extension.
 
 1. Install it straight from GitHub, together with ForgeDB:
     ```bash
-    npm i github:Demonic1594/ForgeGiveaways @tryforge/forge.db
+    npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db
     ```
-    The compiled `dist/` folder is committed, so no build step is needed. The package keeps the original name, so it replaces `@tryforge/forge.giveaways` without changing your code. To pin a version, use `github:Demonic1594/ForgeGiveaways#v2.0.0`.
+    The compiled `dist/` folder is committed, so no build step is needed. To pin a version, use `github:Demonic1594/ReForgeGiveaways#v2.0.0`.
 
 2. Load it in your main file:
     ```js
     const { ForgeClient } = require("@tryforge/forgescript")
     const { ForgeDB } = require("@tryforge/forge.db")
-    const { ForgeGiveaways } = require("@tryforge/forge.giveaways")
+    const { ReForgeGiveaways } = require("@tryforge/reforge.giveaways")
 
-    const giveaways = new ForgeGiveaways({
+    const giveaways = new ReForgeGiveaways({
         events: ["giveawayStart", "giveawayEnd"],
         useDefault: true,
     })
@@ -77,6 +77,14 @@ ForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extensi
     ```
 
     `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded.
+
+### Switching from ForgeGiveaways
+
+1. `npm uninstall @tryforge/forge.giveaways`, then install as above.
+2. Change `require("@tryforge/forge.giveaways")` to `require("@tryforge/reforge.giveaways")` and `ForgeGiveaways` to `ReForgeGiveaways` (the old name is not exported, so the two can't be mixed up).
+3. Keep your database: existing giveaways are upgraded in place on first start. Your commands, events and function calls keep working.
+
+The extension registers itself as `reforge.giveaways` (it was `forge.giveaways`), which only matters if another extension listed it by name in `requireExtensions`.
 
 ### Options
 
@@ -102,7 +110,7 @@ ForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extensi
 Text placeholders in `messages`: `{prize}`, `{mentions}`, `{s}` (plural "s"), `{reason}`, `{guild}`, `{link}`, `{tickets}`, `{ping}`, `{entryMethod}`.
 
 ```js
-new ForgeGiveaways({
+new ReForgeGiveaways({
     dmWinners: true,
     deleteEndedAfter: 30 * 24 * 60 * 60 * 1000, // keep ended giveaways for 30 days
     messages: { joined: "You're in for **{prize}**! Good luck.{tickets}" },

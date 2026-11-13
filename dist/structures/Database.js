@@ -71,7 +71,7 @@ class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
     }
     static repo() {
         if (!this.db)
-            throw new Error("[ForgeGiveaways] Database is not connected yet");
+            throw new Error("[ReForgeGiveaways] Database is not connected yet");
         return this.db.getRepository(this.schema);
     }
     /** Creates a new, unsaved giveaway instance of the right class for the driver. */

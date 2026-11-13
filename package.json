@@ -1,7 +1,7 @@
 {
-  "name": "@tryforge/forge.giveaways",
+  "name": "@tryforge/reforge.giveaways",
   "version": "2.0.0",
-  "description": "Giveaway extension for ForgeScript with no duration limit: pause/resume, bonus entries, requirements, entry caps and customizable messages. Fork of tryforge/ForgeGiveaways.",
+  "description": "ReForgeGiveaways: a reworked giveaway extension for ForgeScript with no duration limit, crash and downtime recovery, abuse protection, pause/resume, bonus entries, requirements and customizable messages. Fork of tryforge/ForgeGiveaways.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -12,15 +12,17 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Demonic1594/ForgeGiveaways.git"
+    "url": "git+https://github.com/Demonic1594/ReForgeGiveaways.git"
   },
   "keywords": [
-    "forgescript",
-    "forge",
     "discord",
+    "extension",
+    "forge",
+    "forgescript",
     "giveaway",
     "giveaways",
-    "extension"
+    "reforge",
+    "reforgegiveaways"
   ],
   "author": "itsnicky. (original), Demonic1594 (fork)",
   "license": "GPL-3.0",
@@ -53,7 +55,7 @@
     "node": ">=18.17"
   },
   "bugs": {
-    "url": "https://github.com/Demonic1594/ForgeGiveaways/issues"
+    "url": "https://github.com/Demonic1594/ReForgeGiveaways/issues"
   },
-  "homepage": "https://github.com/Demonic1594/ForgeGiveaways#readme"
+  "homepage": "https://github.com/Demonic1594/ReForgeGiveaways#readme"
 }

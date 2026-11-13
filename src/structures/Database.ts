@@ -83,7 +83,7 @@ export class Database extends GiveawaysDatabaseManager {
     }
 
     private static repo(): Repository<Giveaway> {
-        if (!this.db) throw new Error("[ForgeGiveaways] Database is not connected yet")
+        if (!this.db) throw new Error("[ReForgeGiveaways] Database is not connected yet")
         return this.db.getRepository(this.schema)
     }
 

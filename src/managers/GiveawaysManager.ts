@@ -14,7 +14,7 @@ import {
 import { format, GiveawayMessages } from "../structures/messages"
 import { GiveawaysErrorType, throwGiveawaysError } from "../functions/error"
 import { chunk, chunkJoin, emojiMatches, KeyedMutex, Scheduler, secureRandom, shuffle, truncate, weightedOrder } from "../utils"
-import type { ForgeGiveaways } from ".."
+import type { ReForgeGiveaways } from ".."
 import type { EntryContext } from "../handlers/GiveawaysEventHandler"
 import noop from "../functions/noop"
 
@@ -97,7 +97,7 @@ export class GiveawaysManager {
     /** Deadlines are processed one at a time so a restart after long downtime doesn't fire everything at once. */
     #deadlineChain: Promise<unknown> = Promise.resolve()
 
-    public constructor(private readonly client: ForgeClient, private readonly giveaways: ForgeGiveaways) {
+    public constructor(private readonly client: ForgeClient, private readonly giveaways: ReForgeGiveaways) {
         const o = giveaways.options
         this.renderer = new Renderer({
             emoji: o.emoji!,
@@ -139,7 +139,7 @@ export class GiveawaysManager {
         if (this.#isReady) return
         let timer: NodeJS.Timeout | undefined
         const timeout = new Promise<never>((_, rej) => {
-            timer = setTimeout(() => rej(new Error("[ForgeGiveaways] Database is not connected")), READY_TIMEOUT)
+            timer = setTimeout(() => rej(new Error("[ReForgeGiveaways] Database is not connected")), READY_TIMEOUT)
             timer.unref?.()
         })
         try {
@@ -162,10 +162,10 @@ export class GiveawaysManager {
     // Helpers
     // ----------------------------------------------------------------------
 
-    private emit: ForgeGiveaways["emitter"]["emit"] = (...args) => this.giveaways.emitter.emit(...args)
+    private emit: ReForgeGiveaways["emitter"]["emit"] = (...args) => this.giveaways.emitter.emit(...args)
 
     /** Whether anything listens to an event, so snapshots are only built when needed. */
-    private wants(event: Parameters<ForgeGiveaways["emitter"]["emit"]>[0]) {
+    private wants(event: Parameters<ReForgeGiveaways["emitter"]["emit"]>[0]) {
         return this.giveaways.emitter.listenerCount(event) > 0
     }
 
@@ -402,7 +402,7 @@ export class GiveawaysManager {
         if (overdue < MAX_POSTPONE) {
             const status = this.client.isReady() ? await this.guildStatus(giveaway.guildID) : "unavailable"
             if (status === "unavailable") {
-                Logger.warn(`[ForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`)
+                Logger.warn(`[ReForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`)
                 this.scheduler.schedule(id, Date.now() + RETRY_DELAY)
                 return null
             }
@@ -872,7 +872,7 @@ export class GiveawaysManager {
         const active = Database.activeGiveaways()
         for (const g of active) this.schedule(g)
         const overdue = active.filter((g) => !g.isPaused() && g.endTimestamp() <= Date.now()).length
-        Logger.info(`[ForgeGiveaways] Restored ${active.length} active giveaway(s)` +
+        Logger.info(`[ReForgeGiveaways] Restored ${active.length} active giveaway(s)` +
             (overdue ? `, ${overdue} ended while offline and will be drawn now` : "") +
             (pending.length ? `, re-announced ${pending.length} result(s)` : ""))
 
@@ -901,7 +901,7 @@ export class GiveawaysManager {
                 if (!cur || cur.hasEnded) return
 
                 if (useDefault && !cur.messageID) {
-                    if (await this.postMessage(cur)) Logger.info(`[ForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
+                    if (await this.postMessage(cur)) Logger.info(`[ReForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
                     else throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, cur.id)
                     return
                 }

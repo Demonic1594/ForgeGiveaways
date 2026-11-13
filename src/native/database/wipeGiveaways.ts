@@ -1,5 +1,5 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
 import { Database } from "../../structures"
 
 export default new NativeFunction({
@@ -18,7 +18,7 @@ export default new NativeFunction({
     ],
     output: ArgType.Number,
     async execute(ctx, [guild]) {
-        const manager = ctx.client.getExtension(ForgeGiveaways, true).giveawaysManager
+        const manager = ctx.client.getExtension(ReForgeGiveaways, true).giveawaysManager
         if (guild) {
             const ids = (await Database.find({ guildID: guild.id })).map((g) => g.id)
             let n = 0

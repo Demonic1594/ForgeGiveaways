@@ -1,6 +1,6 @@
 import { ForgeClient } from "@tryforge/forgescript"
 import { ButtonInteraction, MessageFlags, time, User } from "discord.js"
-import { ForgeGiveaways } from ".."
+import { ReForgeGiveaways } from ".."
 import { Database, ENTRY_BUTTON_ID, Giveaway, INFO_BUTTON_ID } from "../structures"
 import { denyReasonText, format, GiveawayMessages } from "../structures/messages"
 import { GiveawaysErrorType, throwGiveawaysError } from "../functions/error"
@@ -44,7 +44,7 @@ export class GiveawaysInteractionHandler {
 
     /** The "info" button: tells the clicker their status, tickets and odds. */
     private async info(interaction: ButtonInteraction<"cached" | "raw">) {
-        const ext = this.client.getExtension(ForgeGiveaways, true)
+        const ext = this.client.getExtension(ReForgeGiveaways, true)
         const m = ext.options.messages as GiveawayMessages
         const reply = (content: string) => interaction.reply({ content, flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(noop)
         if (!Database.ready) return reply(m.notReady)
@@ -69,7 +69,7 @@ export class GiveawaysInteractionHandler {
     }
 
     private async handle(interaction: ButtonInteraction<"cached" | "raw">) {
-        const ext = this.client.getExtension(ForgeGiveaways, true)
+        const ext = this.client.getExtension(ReForgeGiveaways, true)
         const { useDefault } = ext.options
         const m = ext.options.messages as GiveawayMessages
         let deferred = false

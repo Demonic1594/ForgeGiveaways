@@ -1,5 +1,5 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
 import { scopedGiveaway } from "../../functions/scope"
 
 export default new NativeFunction({
@@ -34,7 +34,7 @@ export default new NativeFunction({
     async execute(ctx, [id, time, guild]) {
         if (!(time > 0)) return this.customError("Time must be greater than 0")
         if (!(await scopedGiveaway(ctx, id, guild))) return this.success(false)
-        const manager = ctx.client.getExtension(ForgeGiveaways, true).giveawaysManager
+        const manager = ctx.client.getExtension(ReForgeGiveaways, true).giveawaysManager
         const giveaway = await manager.extend(id, time).catch(ctx.noop)
         return this.success(!!giveaway)
     }

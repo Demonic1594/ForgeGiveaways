@@ -19,7 +19,7 @@ exports.default = new forgescript_1.NativeFunction({
     ],
     output: forgescript_1.ArgType.Number,
     async execute(ctx, [guild]) {
-        const manager = ctx.client.getExtension(__1.ForgeGiveaways, true).giveawaysManager;
+        const manager = ctx.client.getExtension(__1.ReForgeGiveaways, true).giveawaysManager;
         if (guild) {
             const ids = (await structures_1.Database.find({ guildID: guild.id })).map((g) => g.id);
             let n = 0;

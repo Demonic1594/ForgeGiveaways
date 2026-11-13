@@ -9,7 +9,7 @@ import { GiveawaysErrorType } from "./functions/error"
 import noop from "./functions/noop"
 import { description, version } from "../package.json"
 
-export interface IForgeGiveawaysOptions {
+export interface IReForgeGiveawaysOptions {
     /** The giveaway events to use. */
     events?: Array<keyof IGiveawayEvents>
 
@@ -66,8 +66,8 @@ export interface IForgeGiveawaysOptions {
     handleSignals?: boolean
 }
 
-export class ForgeGiveaways extends ForgeExtension {
-    name = "forge.giveaways"
+export class ReForgeGiveaways extends ForgeExtension {
+    name = "reforge.giveaways"
     description = description
     version = version
     requireExtensions = ["forge.db"]
@@ -77,7 +77,7 @@ export class ForgeGiveaways extends ForgeExtension {
     public giveawaysManager!: GiveawaysManager
     public commands!: GiveawaysCommandManager
 
-    public constructor(public readonly options: IForgeGiveawaysOptions = {}) {
+    public constructor(public readonly options: IReForgeGiveawaysOptions = {}) {
         super()
         const o = this.options
         o.useDefault ??= true
@@ -99,19 +99,19 @@ export class ForgeGiveaways extends ForgeExtension {
     public async init(client: ForgeClient) {
         this.commands = new GiveawaysCommandManager(client)
 
-        EventManager.load("ForgeGiveawaysEvents", __dirname + "/events")
+        EventManager.load("ReForgeGiveawaysEvents", __dirname + "/events")
         this.load(__dirname + "/native")
 
         if (this.options.useReactions) {
             new GiveawaysReactionHandler(client)
             if (!client.options.intents.has("GuildMessageReactions")) {
-                Logger.warn(`[ForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`)
+                Logger.warn(`[ReForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`)
             }
         } else {
             new GiveawaysInteractionHandler(client)
         }
 
-        if (this.options.events?.length) client.events.load("ForgeGiveawaysEvents", this.options.events)
+        if (this.options.events?.length) client.events.load("ReForgeGiveawaysEvents", this.options.events)
         if (!this.options.useDefault && !this.options.events?.includes("giveawayStart")) {
             throw new Error(GiveawaysErrorType.MissingStartEvent)
         }
@@ -133,11 +133,11 @@ export class ForgeGiveaways extends ForgeExtension {
         for (let attempt = 0; ; attempt++) {
             try {
                 await new Database(this.emitter).init()
-                if (attempt) Logger.info(`[ForgeGiveaways] Database connected after ${attempt + 1} attempts`)
+                if (attempt) Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`)
                 return
             } catch (e) {
                 const wait = Math.min(1000 * 2 ** attempt, 60_000)
-                Logger.error(`[ForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
+                Logger.error(`[ReForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
                 await new Promise((r) => setTimeout(r, wait))
             }
         }

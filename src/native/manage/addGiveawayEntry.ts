@@ -1,5 +1,5 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
 import { scopedGiveaway } from "../../functions/scope"
 
 export default new NativeFunction({
@@ -39,7 +39,7 @@ export default new NativeFunction({
     output: ArgType.Boolean,
     async execute(ctx, [id, user, bypass, guild]) {
         if (!(await scopedGiveaway(ctx, id, guild))) return this.success(false)
-        const manager = ctx.client.getExtension(ForgeGiveaways, true).giveawaysManager
+        const manager = ctx.client.getExtension(ReForgeGiveaways, true).giveawaysManager
         const giveaway = await manager.addEntry(id, user.id, !!bypass).catch(ctx.noop)
         return this.success(!!giveaway)
     }

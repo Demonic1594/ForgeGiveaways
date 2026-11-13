@@ -17,7 +17,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ForgeGiveaways = void 0;
+exports.ReForgeGiveaways = void 0;
 const forgescript_1 = require("@tryforge/forgescript");
 const discord_js_1 = require("discord.js");
 const managers_1 = require("./managers");
@@ -27,9 +27,9 @@ const structures_1 = require("./structures");
 const error_1 = require("./functions/error");
 const noop_1 = __importDefault(require("./functions/noop"));
 const package_json_1 = require("../package.json");
-class ForgeGiveaways extends forgescript_1.ForgeExtension {
+class ReForgeGiveaways extends forgescript_1.ForgeExtension {
     options;
-    name = "forge.giveaways";
+    name = "reforge.giveaways";
     description = package_json_1.description;
     version = package_json_1.version;
     requireExtensions = ["forge.db"];
@@ -57,19 +57,19 @@ class ForgeGiveaways extends forgescript_1.ForgeExtension {
     }
     async init(client) {
         this.commands = new managers_1.GiveawaysCommandManager(client);
-        forgescript_1.EventManager.load("ForgeGiveawaysEvents", __dirname + "/events");
+        forgescript_1.EventManager.load("ReForgeGiveawaysEvents", __dirname + "/events");
         this.load(__dirname + "/native");
         if (this.options.useReactions) {
             new handlers_1.GiveawaysReactionHandler(client);
             if (!client.options.intents.has("GuildMessageReactions")) {
-                forgescript_1.Logger.warn(`[ForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`);
+                forgescript_1.Logger.warn(`[ReForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`);
             }
         }
         else {
             new handlers_1.GiveawaysInteractionHandler(client);
         }
         if (this.options.events?.length)
-            client.events.load("ForgeGiveawaysEvents", this.options.events);
+            client.events.load("ReForgeGiveawaysEvents", this.options.events);
         if (!this.options.useDefault && !this.options.events?.includes("giveawayStart")) {
             throw new Error(error_1.GiveawaysErrorType.MissingStartEvent);
         }
@@ -90,12 +90,12 @@ class ForgeGiveaways extends forgescript_1.ForgeExtension {
             try {
                 await new structures_1.Database(this.emitter).init();
                 if (attempt)
-                    forgescript_1.Logger.info(`[ForgeGiveaways] Database connected after ${attempt + 1} attempts`);
+                    forgescript_1.Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`);
                 return;
             }
             catch (e) {
                 const wait = Math.min(1000 * 2 ** attempt, 60_000);
-                forgescript_1.Logger.error(`[ForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e);
+                forgescript_1.Logger.error(`[ReForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e);
                 await new Promise((r) => setTimeout(r, wait));
             }
         }
@@ -112,7 +112,7 @@ class ForgeGiveaways extends forgescript_1.ForgeExtension {
         }
     }
 }
-exports.ForgeGiveaways = ForgeGiveaways;
+exports.ReForgeGiveaways = ReForgeGiveaways;
 __exportStar(require("./handlers"), exports);
 __exportStar(require("./managers"), exports);
 __exportStar(require("./structures"), exports);

@@ -42,7 +42,7 @@ exports.default = new forgescript_1.NativeFunction({
             return this.customError("Amount must be at least 1");
         if (!(await (0, scope_1.scopedGiveaway)(ctx, id, guild)))
             return this.success(false);
-        const manager = ctx.client.getExtension(__1.ForgeGiveaways, true).giveawaysManager;
+        const manager = ctx.client.getExtension(__1.ReForgeGiveaways, true).giveawaysManager;
         const giveaway = await manager.reroll(id, !!unique, amount ?? undefined).catch(ctx.noop);
         return this.success(!!giveaway);
     }

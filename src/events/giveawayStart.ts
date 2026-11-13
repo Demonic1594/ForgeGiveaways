@@ -1,7 +1,7 @@
 import { Interpreter } from "@tryforge/forgescript"
 import { GiveawaysEventHandler } from "../handlers"
 import { Context } from "../structures"
-import { ForgeGiveaways } from ".."
+import { ReForgeGiveaways } from ".."
 import { GiveawaysErrorType, throwGiveawaysError } from "../functions/error"
 import noop from "../functions/noop"
 
@@ -10,7 +10,7 @@ export default new GiveawaysEventHandler({
     version: "1.0.0",
     description: "This event is fired when a giveaway has started. With default messages disabled it must $return the ID of the giveaway message it sent",
     listener: async function (gw) {
-        const client = this.getExtension(ForgeGiveaways, true)
+        const client = this.getExtension(ReForgeGiveaways, true)
         const manager = client.giveawaysManager
         const commands = client.commands.get("giveawayStart")
         const custom = !client.options.useDefault

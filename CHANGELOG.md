@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0 (fork, November 2026)
+## 2.0.0 (ReForgeGiveaways, November 2026)
 
 Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) 1.1.0 (commit `586fb15`). The fork is a modified version of that program, under the same GPL-3.0 license.
 
@@ -73,6 +73,7 @@ Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways
 - Test suite (`npm test`): scheduler, locking, draw fairness, requirements, and end-to-end runs on SQLite including a restart
 
 ### Changed
+- Renamed to **ReForgeGiveaways**: package `@tryforge/reforge.giveaways`, class `ReForgeGiveaways` (`ForgeGiveaways` is no longer exported), extension name `reforge.giveaways`, options type `IReForgeGiveawaysOptions`, log prefix `[ReForgeGiveaways]`.
 - Persistence uses TypeORM `EntitySchema` per driver instead of decorators; table names and stored formats are unchanged, so existing databases upgrade in place.
 - `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies.
 - The generated typedoc HTML (`docs/`) is no longer committed; run `npm run docs`.

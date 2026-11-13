@@ -18,5 +18,5 @@ export enum GiveawaysErrorType {
 export function throwGiveawaysError(type: GiveawaysErrorType, value?: string) {
     const key = Object.keys(GiveawaysErrorType).find((x) => GiveawaysErrorType[x as keyof typeof GiveawaysErrorType] === type)
     const message = type.replace(/\$(\d+)/g, () => value ?? "")
-    Logger.error(`[ForgeGiveaways] ${key}: ${message}`)
+    Logger.error(`[ReForgeGiveaways] ${key}: ${message}`)
 }

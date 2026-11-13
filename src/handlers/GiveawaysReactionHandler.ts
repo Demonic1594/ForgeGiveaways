@@ -1,6 +1,6 @@
 import { ForgeClient, Logger } from "@tryforge/forgescript"
 import { MessageReaction, PartialMessageReaction, PartialUser, Partials, User } from "discord.js"
-import { ForgeGiveaways } from ".."
+import { ReForgeGiveaways } from ".."
 import { Database } from "../structures"
 import noop from "../functions/noop"
 import { emojiMatches } from "../utils"
@@ -13,7 +13,7 @@ export class GiveawaysReactionHandler {
     public constructor(private readonly client: ForgeClient) {
         const partials = client.options.partials ?? []
         if (!partials.includes(Partials.Message) || !partials.includes(Partials.Reaction)) {
-            Logger.warn(`[ForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`)
+            Logger.warn(`[ReForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`)
         }
 
         client.on("messageReactionAdd", (r, u) => void this.add(r, u).catch(noop))
@@ -21,7 +21,7 @@ export class GiveawaysReactionHandler {
     }
 
     private get ext() {
-        return this.client.getExtension(ForgeGiveaways, true)
+        return this.client.getExtension(ReForgeGiveaways, true)
     }
 
     private matches(reaction: MessageReaction | PartialMessageReaction) {

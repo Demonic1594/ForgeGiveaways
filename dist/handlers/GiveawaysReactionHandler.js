@@ -20,13 +20,13 @@ class GiveawaysReactionHandler {
         this.client = client;
         const partials = client.options.partials ?? [];
         if (!partials.includes(discord_js_1.Partials.Message) || !partials.includes(discord_js_1.Partials.Reaction)) {
-            forgescript_1.Logger.warn(`[ForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`);
+            forgescript_1.Logger.warn(`[ReForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`);
         }
         client.on("messageReactionAdd", (r, u) => void this.add(r, u).catch(noop_1.default));
         client.on("messageReactionRemove", (r, u) => void this.remove(r, u).catch(noop_1.default));
     }
     get ext() {
-        return this.client.getExtension(__1.ForgeGiveaways, true);
+        return this.client.getExtension(__1.ReForgeGiveaways, true);
     }
     matches(reaction) {
         return (0, utils_1.emojiMatches)(reaction.emoji, this.ext.options.emoji);

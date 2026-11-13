@@ -114,7 +114,7 @@ class GiveawaysManager {
             return;
         let timer;
         const timeout = new Promise((_, rej) => {
-            timer = setTimeout(() => rej(new Error("[ForgeGiveaways] Database is not connected")), READY_TIMEOUT);
+            timer = setTimeout(() => rej(new Error("[ReForgeGiveaways] Database is not connected")), READY_TIMEOUT);
             timer.unref?.();
         });
         try {
@@ -378,7 +378,7 @@ class GiveawaysManager {
         if (overdue < MAX_POSTPONE) {
             const status = this.client.isReady() ? await this.guildStatus(giveaway.guildID) : "unavailable";
             if (status === "unavailable") {
-                forgescript_1.Logger.warn(`[ForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`);
+                forgescript_1.Logger.warn(`[ReForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`);
                 this.scheduler.schedule(id, Date.now() + RETRY_DELAY);
                 return null;
             }
@@ -846,7 +846,7 @@ class GiveawaysManager {
         for (const g of active)
             this.schedule(g);
         const overdue = active.filter((g) => !g.isPaused() && g.endTimestamp() <= Date.now()).length;
-        forgescript_1.Logger.info(`[ForgeGiveaways] Restored ${active.length} active giveaway(s)` +
+        forgescript_1.Logger.info(`[ReForgeGiveaways] Restored ${active.length} active giveaway(s)` +
             (overdue ? `, ${overdue} ended while offline and will be drawn now` : "") +
             (pending.length ? `, re-announced ${pending.length} result(s)` : ""));
         this.#repairChain = this.#repairMessages(active.filter((g) => g.isPaused() || g.endTimestamp() > Date.now())).catch(noop_1.default);
@@ -871,7 +871,7 @@ class GiveawaysManager {
                     return;
                 if (useDefault && !cur.messageID) {
                     if (await this.postMessage(cur))
-                        forgescript_1.Logger.info(`[ForgeGiveaways] Posted the missing message of giveaway ${cur.id}`);
+                        forgescript_1.Logger.info(`[ReForgeGiveaways] Posted the missing message of giveaway ${cur.id}`);
                     else
                         (0, error_1.throwGiveawaysError)(error_1.GiveawaysErrorType.MessageNotDetermined, cur.id);
                     return;

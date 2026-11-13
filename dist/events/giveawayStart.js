@@ -14,7 +14,7 @@ exports.default = new handlers_1.GiveawaysEventHandler({
     version: "1.0.0",
     description: "This event is fired when a giveaway has started. With default messages disabled it must $return the ID of the giveaway message it sent",
     listener: async function (gw) {
-        const client = this.getExtension(__1.ForgeGiveaways, true);
+        const client = this.getExtension(__1.ReForgeGiveaways, true);
         const manager = client.giveawaysManager;
         const commands = client.commands.get("giveawayStart");
         const custom = !client.options.useDefault;

@@ -41,7 +41,7 @@ exports.default = new forgescript_1.NativeFunction({
     async execute(ctx, [id, user, bypass, guild]) {
         if (!(await (0, scope_1.scopedGiveaway)(ctx, id, guild)))
             return this.success(false);
-        const manager = ctx.client.getExtension(__1.ForgeGiveaways, true).giveawaysManager;
+        const manager = ctx.client.getExtension(__1.ReForgeGiveaways, true).giveawaysManager;
         const giveaway = await manager.addEntry(id, user.id, !!bypass).catch(ctx.noop);
         return this.success(!!giveaway);
     }

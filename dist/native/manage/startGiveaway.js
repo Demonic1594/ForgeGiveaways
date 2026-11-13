@@ -58,7 +58,7 @@ exports.default = new forgescript_1.NativeFunction({
             return this.customError("Duration must be greater than 0");
         if (!prize.trim())
             return this.customError("Prize must not be empty");
-        const client = ctx.client.getExtension(__1.ForgeGiveaways, true);
+        const client = ctx.client.getExtension(__1.ReForgeGiveaways, true);
         const b = ctx.giveawayBuilder;
         const giveaway = await client.giveawaysManager.start({
             guildID: channel.guildId,

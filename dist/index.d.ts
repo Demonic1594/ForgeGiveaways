@@ -5,7 +5,7 @@ import { IGiveawayEvents } from "./handlers";
 import { TypedEmitter } from "tiny-typed-emitter";
 import { TransformEvents } from "@tryforge/forge.db";
 import { GiveawayMessages } from "./structures";
-export interface IForgeGiveawaysOptions {
+export interface IReForgeGiveawaysOptions {
     /** The giveaway events to use. */
     events?: Array<keyof IGiveawayEvents>;
     /** Whether to use the default giveaway messages. Defaults to `true`. */
@@ -51,9 +51,9 @@ export interface IForgeGiveawaysOptions {
     /** Flush pending writes on SIGINT/SIGTERM before the process exits. Defaults to `true`. */
     handleSignals?: boolean;
 }
-export declare class ForgeGiveaways extends ForgeExtension {
+export declare class ReForgeGiveaways extends ForgeExtension {
     #private;
-    readonly options: IForgeGiveawaysOptions;
+    readonly options: IReForgeGiveawaysOptions;
     name: string;
     description: string;
     version: string;
@@ -61,7 +61,7 @@ export declare class ForgeGiveaways extends ForgeExtension {
     emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>;
     giveawaysManager: GiveawaysManager;
     commands: GiveawaysCommandManager;
-    constructor(options?: IForgeGiveawaysOptions);
+    constructor(options?: IReForgeGiveawaysOptions);
     init(client: ForgeClient): Promise<void>;
 }
 export * from "./handlers";

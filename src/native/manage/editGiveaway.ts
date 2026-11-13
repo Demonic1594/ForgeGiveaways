@@ -1,5 +1,5 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
 import { GiveawayLimits } from "../../structures"
 import { scopedGiveaway } from "../../functions/scope"
 
@@ -52,7 +52,7 @@ export default new NativeFunction({
         // to match the giveaway, so one guild can't edit another's giveaway.
         if (!(await scopedGiveaway(ctx, id, guild))) return this.success(false)
 
-        const client = ctx.client.getExtension(ForgeGiveaways, true)
+        const client = ctx.client.getExtension(ReForgeGiveaways, true)
         const b = ctx.giveawayBuilder
 
         const giveaway = await client.giveawaysManager.edit(id, {

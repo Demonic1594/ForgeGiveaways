@@ -53,7 +53,7 @@ class GiveawaysInteractionHandler {
     }
     /** The "info" button: tells the clicker their status, tickets and odds. */
     async info(interaction) {
-        const ext = this.client.getExtension(__1.ForgeGiveaways, true);
+        const ext = this.client.getExtension(__1.ReForgeGiveaways, true);
         const m = ext.options.messages;
         const reply = (content) => interaction.reply({ content, flags: discord_js_1.MessageFlags.Ephemeral, allowedMentions: { parse: [] } }).catch(noop_1.default);
         if (!structures_1.Database.ready)
@@ -77,7 +77,7 @@ class GiveawaysInteractionHandler {
         }));
     }
     async handle(interaction) {
-        const ext = this.client.getExtension(__1.ForgeGiveaways, true);
+        const ext = this.client.getExtension(__1.ReForgeGiveaways, true);
         const { useDefault } = ext.options;
         const m = ext.options.messages;
         let deferred = false;

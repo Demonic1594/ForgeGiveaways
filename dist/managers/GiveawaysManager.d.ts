@@ -2,7 +2,7 @@ import { GuildMember, Message, Snowflake, User } from "discord.js";
 import { ForgeClient } from "@tryforge/forgescript";
 import { Giveaway, GiveawayDenyReason, IGiveawayBonusEntry, IGiveawayDisplay, IGiveawayRequirements, IGiveawayStartOptions, Renderer } from "../structures";
 import { Scheduler } from "../utils";
-import type { ForgeGiveaways } from "..";
+import type { ReForgeGiveaways } from "..";
 import type { EntryContext } from "../handlers/GiveawaysEventHandler";
 export type { IGiveawayStartOptions } from "../structures/Giveaway";
 export interface IGiveawayEditOptions {
@@ -39,7 +39,7 @@ export declare class GiveawaysManager {
     private readonly giveaways;
     readonly scheduler: Scheduler;
     readonly renderer: Renderer;
-    constructor(client: ForgeClient, giveaways: ForgeGiveaways);
+    constructor(client: ForgeClient, giveaways: ReForgeGiveaways);
     private get messages();
     /** Resolves once the database is connected. */
     whenReady(): Promise<void>;

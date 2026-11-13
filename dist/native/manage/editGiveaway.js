@@ -55,7 +55,7 @@ exports.default = new forgescript_1.NativeFunction({
         // to match the giveaway, so one guild can't edit another's giveaway.
         if (!(await (0, scope_1.scopedGiveaway)(ctx, id, guild)))
             return this.success(false);
-        const client = ctx.client.getExtension(__1.ForgeGiveaways, true);
+        const client = ctx.client.getExtension(__1.ReForgeGiveaways, true);
         const b = ctx.giveawayBuilder;
         const giveaway = await client.giveawaysManager.edit(id, {
             hostID: host?.id,

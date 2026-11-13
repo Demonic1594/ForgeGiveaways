@@ -1,7 +1,7 @@
 "use strict"
 /*
  * Boots a real ForgeClient (never logs in) with ForgeDB on better-sqlite3 and
- * ForgeGiveaways, and swaps the three Discord lookups the manager makes for
+ * ReForgeGiveaways, and swaps the three Discord lookups the manager makes for
  * in-memory fakes. Everything else (scheduler, locking, persistence, the
  * renderer, winner drawing) is the real code.
  */
@@ -9,14 +9,14 @@ const path = require("path")
 const { SnowflakeUtil } = require("discord.js")
 const { ForgeClient } = require("@tryforge/forgescript")
 const { ForgeDB } = require("@tryforge/forge.db")
-const { ForgeGiveaways } = require("../..")
+const { ReForgeGiveaways } = require("../..")
 
 const DAY = 864e5
 const snow = (agoMs = 2 * 365 * DAY) => SnowflakeUtil.generate({ timestamp: Date.now() - agoMs }).toString()
 
 async function boot(dir, options = {}) {
     const { autoMembers, ...extOptions } = options
-    const giveaways = new ForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...extOptions })
+    const giveaways = new ReForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...extOptions })
     // Record every event from the very start (restore runs during boot).
     const emitted = []
     const realEmit = giveaways.emitter.emit.bind(giveaways.emitter)

@@ -21,6 +21,6 @@ var GiveawaysErrorType;
 function throwGiveawaysError(type, value) {
     const key = Object.keys(GiveawaysErrorType).find((x) => GiveawaysErrorType[x] === type);
     const message = type.replace(/\$(\d+)/g, () => value ?? "");
-    forgescript_1.Logger.error(`[ForgeGiveaways] ${key}: ${message}`);
+    forgescript_1.Logger.error(`[ReForgeGiveaways] ${key}: ${message}`);
 }
 //# sourceMappingURL=error.js.map

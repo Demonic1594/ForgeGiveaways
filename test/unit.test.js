@@ -271,3 +271,11 @@ test("win chance estimate", () => {
     assert.ok(Math.abs(g.winChance("a") - 0.7) < 1e-9)
     assert.equal(g.url(), null)
 })
+
+test("the extension is ReForgeGiveaways, distinct from the original", () => {
+    const pkg = require("../dist")
+    assert.equal(typeof pkg.ReForgeGiveaways, "function")
+    assert.equal(pkg.ForgeGiveaways, undefined, "the original's class name is not exported")
+    assert.equal(new pkg.ReForgeGiveaways({ handleSignals: false }).name, "reforge.giveaways")
+    assert.equal(require("../package.json").name, "@tryforge/reforge.giveaways")
+})

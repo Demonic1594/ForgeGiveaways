@@ -1,6 +1,6 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import { BaseChannel, GuildBasedChannel } from "discord.js"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
 import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
@@ -55,7 +55,7 @@ export default new NativeFunction({
         if (!(duration > 0)) return this.customError("Duration must be greater than 0")
         if (!prize.trim()) return this.customError("Prize must not be empty")
 
-        const client = ctx.client.getExtension(ForgeGiveaways, true)
+        const client = ctx.client.getExtension(ReForgeGiveaways, true)
         const b = ctx.giveawayBuilder
 
         const giveaway = await client.giveawaysManager.start({
