@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.2.0 (November 2026)
+
+Tag [`v2.2.0`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.2.0) · [all changes since 2.1.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.1.0...v2.2.0) · [upgrade notes](README.md#from-210-to-220)
+
+A hardening release: closes the remaining ways to act on another server, throttles reaction spam, and rejects inputs that used to break giveaway messages later. No database changes.
 
 ### Security
 - `$startGiveaway` refuses to post in a channel of another server than the one the command runs in.
@@ -14,6 +18,10 @@
 - A translated title or field name longer than Discord allows made every giveaway message fail. Texts are cut to the embed limits.
 - An invalid color in `colors` failed on every giveaway; it now fails at start-up with a clear message.
 - Dependencies: updated `minimatch` (used by TypeORM) to a version without the known ReDoS issues. The remaining `glob` advisory in TypeORM 0.3 only affects file-pattern loading, which this extension doesn't use.
+
+### Tests
+- The fuzzer is reproducible: operations and injected failures use separate random streams, so a seed replays the same way on any database. It keeps six giveaways running and now makes about 800 writes per seed, about 120 of them failing (before: as few as 7 failures).
+- New `test/hardening.test.js`; CI runs it against PostgreSQL too.
 
 ## 2.1.0 (November 2026)
 
