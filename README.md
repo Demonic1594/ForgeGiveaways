@@ -71,7 +71,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.2.0`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
+    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.2.1`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
 
 2. Here's an example of how your main file should look:
     ```js
@@ -404,8 +404,11 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 Install the new release over the old one; there is nothing to migrate by hand. On the first start the database is upgraded in place, and only nullable columns are ever added, so your giveaways and entries are kept.
 
 ```bash
-npm i github:Demonic1594/ReForgeGiveaways#v2.2.0
+npm i github:Demonic1594/ReForgeGiveaways#v2.2.1
 ```
+
+#### From 2.2.0 to 2.2.1
+No database changes. `$setGiveawayImage` and `$setGiveawayThumbnail` now refuse a link that is not http(s) (or is longer than 2048 characters) with an error; before, it was silently stored as a broken image.
 
 #### From 2.1.0 to 2.2.0
 No database changes. What behaves differently:
