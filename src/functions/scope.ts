@@ -21,6 +21,17 @@ function contextScope(ctx: Context): string | null | false {
 }
 
 /**
+ * Which giveaways `$wipeGiveaways` may delete: those of one guild (an id),
+ * every giveaway (`null`, only from contexts nobody outside the bot can
+ * trigger), or none (`false`, a direct message without a guild argument).
+ * A command running in a guild only ever wipes that guild: 2.1.0 deleted
+ * the giveaways of every server when the argument was left out.
+ */
+export function wipeScope(ctx: Context, guild?: Guild | null): string | null | false {
+    return guild?.id ?? contextScope(ctx)
+}
+
+/**
  * Whether a context may start a giveaway in a channel of `channelGuildID`.
  * A command running in one guild can't post a giveaway into another guild's
  * channel. Contexts without a guild (giveaway events, `ready`, direct

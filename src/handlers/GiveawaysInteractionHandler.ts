@@ -29,6 +29,8 @@ export class GiveawaysInteractionHandler {
     /** Last join/leave per giveaway and user, for the anti-spam cooldown. */
     readonly #lastToggle = new Map<string, number>()
     #lastSweep = 0
+    /** Messages already reported as unknown, so clicks can't flood the log. */
+    readonly #reportedUnknown = new Set<string>()
 
     /** Returns the remaining cooldown in ms (0 if none) and records the click. */
     #cooldown(key: string, ms: number) {
@@ -93,7 +95,12 @@ export class GiveawaysInteractionHandler {
 
         const giveaway = await Database.getByMessage(interaction.message.id, interaction.channelId)
         if (!giveaway) {
-            throwGiveawaysError(GiveawaysErrorType.UnknownGiveaway, interaction.message.id)
+            const id = interaction.message.id
+            if (!this.#reportedUnknown.has(id)) {
+                if (this.#reportedUnknown.size >= 1000) this.#reportedUnknown.clear()
+                this.#reportedUnknown.add(id)
+                throwGiveawaysError(GiveawaysErrorType.UnknownGiveaway, id)
+            }
             return reply(m.unknown)
         }
         // If a giveawayEntryRevoke event wants to answer, let the click go on:

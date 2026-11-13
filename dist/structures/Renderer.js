@@ -88,7 +88,7 @@ class Renderer {
         const paused = g.isPaused();
         const entryMethod = this.opts.useReactions ? m.entryMethodReaction : m.entryMethodButton;
         return this.#base(g, paused ? this.opts.colors.paused : this.opts.colors.active)
-            .setTitle(paused ? m.pausedTitle : m.title)
+            .setTitle((0, utils_1.truncate)(paused ? m.pausedTitle : m.title, 256))
             .setDescription((0, utils_1.truncate)(this.#details(g), 4096))
             .setFields(paused
             ? { name: m.fieldTimeLeft, value: (0, utils_1.formatDuration)(g.timeLeft()), inline: true }
@@ -114,7 +114,7 @@ class Renderer {
             lines.push((0, messages_1.format)(m.embedWinners, { s: g.winners.length === 1 ? "" : "s", mentions: this.#winnerList(g.winners) }));
         lines.push((0, messages_1.format)(m.embedTotalEntries, { count: g.entries.length }));
         return this.#base(g, g.cancelled ? this.opts.colors.cancelled : this.opts.colors.ended)
-            .setTitle(g.cancelled ? m.cancelledTitle : m.endedTitle)
+            .setTitle((0, utils_1.truncate)(g.cancelled ? m.cancelledTitle : m.endedTitle, 256))
             .setDescription((0, utils_1.truncate)(lines.join("\n"), 4096))
             .setFields({ name: m.fieldEnded, value: `${(0, discord_js_1.time)(Math.floor(this.#shownEnd(g) / 1000), "R")}`, inline: true }, { name: m.fieldHost, value: `<@${g.hostID}>`, inline: true })
             .setTimestamp(this.#shownEnd(g))
@@ -138,10 +138,19 @@ class Renderer {
         }
         return [row.toJSON()];
     }
+    /**
+     * Keeps field names and values inside Discord's limits (256 and 1024).
+     * They come from the `messages` option, and one translation that is too
+     * long would otherwise make Discord refuse every giveaway message.
+     */
+    #fit(embed) {
+        const fields = embed.data.fields ?? [];
+        return embed.setFields(fields.map((f) => ({ ...f, name: (0, utils_1.truncate)(f.name || "\u200b", 256), value: (0, utils_1.truncate)(f.value || "\u200b", 1024) })));
+    }
     /** Full payload for the giveaway message in its current state. */
     payload(g) {
         return {
-            embeds: [g.hasEnded ? this.endedEmbed(g) : this.activeEmbed(g)],
+            embeds: [this.#fit(g.hasEnded ? this.endedEmbed(g) : this.activeEmbed(g))],
             components: this.components(g),
         };
     }

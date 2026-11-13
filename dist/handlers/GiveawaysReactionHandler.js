@@ -25,6 +25,30 @@ class GiveawaysReactionHandler {
         client.on("messageReactionAdd", (r, u) => void this.add(r, u).catch(noop_1.default));
         client.on("messageReactionRemove", (r, u) => void this.remove(r, u).catch(noop_1.default));
     }
+    /** Last entry change per giveaway and user, for `entryCooldown`. */
+    #lastChange = new Map();
+    /**
+     * Whether a join must wait for the cooldown. Leaving is never refused
+     * (the reaction is already gone), but it starts the cooldown, so
+     * reacting and unreacting in a loop costs at most one entry change, one
+     * member lookup and one event per cooldown period.
+     */
+    #coolingDown(key, record) {
+        const ms = this.ext.options.entryCooldown ?? 0;
+        if (ms <= 0)
+            return false;
+        const now = Date.now();
+        const last = this.#lastChange.get(key);
+        if (!record)
+            return last !== undefined && now - last < ms;
+        this.#lastChange.set(key, now);
+        if (this.#lastChange.size > 10_000) {
+            for (const [k, t] of this.#lastChange)
+                if (now - t >= ms)
+                    this.#lastChange.delete(k);
+        }
+        return false;
+    }
     get ext() {
         return this.client.getExtension(__1.ReForgeGiveaways, true);
     }
@@ -41,6 +65,11 @@ class GiveawaysReactionHandler {
             reaction.users.remove(user.id).catch(noop_1.default);
             return;
         }
+        const key = `${giveaway.id}:${user.id}`;
+        if (!giveaway.hasEntered(user.id) && this.#coolingDown(key, false)) {
+            reaction.users.remove(user.id).catch(noop_1.default);
+            return;
+        }
         const guild = this.client.guilds.cache.get(giveaway.guildID);
         const member = guild?.members.cache.get(user.id) ?? (await guild?.members.fetch(user.id).catch(() => null));
         const full = user.partial ? await user.fetch().catch(() => null) : user;
@@ -51,6 +80,8 @@ class GiveawaysReactionHandler {
         const result = await this.ext.giveawaysManager.join(giveaway.id, member, reaction, full);
         if (result?.action === "denied")
             reaction.users.remove(user.id).catch(noop_1.default);
+        else if (result)
+            this.#coolingDown(key, true);
     }
     async remove(reaction, user) {
         if (user.bot || !structures_1.Database.ready || !this.matches(reaction))
@@ -61,7 +92,9 @@ class GiveawaysReactionHandler {
         if (!giveaway || !giveaway.isActive() || !giveaway.hasEntered(user.id))
             return;
         const full = user.partial ? await user.fetch().catch(() => null) : user;
-        await this.ext.giveawaysManager.leave(giveaway.id, user.id, reaction, full ?? undefined);
+        const left = await this.ext.giveawaysManager.leave(giveaway.id, user.id, reaction, full ?? undefined);
+        if (left)
+            this.#coolingDown(`${giveaway.id}:${user.id}`, true);
     }
 }
 exports.GiveawaysReactionHandler = GiveawaysReactionHandler;

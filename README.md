@@ -116,7 +116,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 | `buttonStyle` | `ButtonStyle.Success` | Button style |
 | `showEntryCount` | `true` | Show the live entry count on the button, e.g. "Join (42)" |
 | `showInfoButton` | `true` | Add an "ℹ️" button that privately shows a member their status, tickets, win chance and why they can't enter |
-| `entryCooldown` | `3000` | Minimum ms between two join/leave clicks of one member on one giveaway; `0` disables it |
+| `entryCooldown` | `3000` | Minimum ms between two joins or leaves of one member on one giveaway, by button or reaction; `0` disables it |
 | `dmWinners` | `false` | Send winners a direct message |
 | `colors` | green, yellow, red, grey | Embed colors for `active`, `paused`, `ended`, `cancelled` |
 | `messages` | see `DEFAULT_MESSAGES` | Override any text of the default messages, including every line of the embed |
@@ -183,7 +183,7 @@ module.exports = {
 ```
 
 > ℹ️ **Note**\
-> There is no maximum duration: `30d`, `1y` and longer all work. Role arguments accept IDs or mentions such as `<@&123...>`.
+> There is no maximum duration: `30d`, `1y` and longer all work. Role arguments accept role IDs or role mentions such as `<@&123...>`; user and channel mentions are refused.
 
 <h3 align="center">Functions</h3><hr>
 
@@ -223,7 +223,7 @@ All return `true` on success. The optional last `guild ID` argument is explained
 | `$cancelGiveaway[id;guild?]` | End without winners |
 | `$addGiveawayEntry[id;user;bypass?;guild?]` / `$removeGiveawayEntry[id;user;guild?]` | Manage entries by hand |
 | `$deleteGiveaway[id;guild?]` | Delete permanently |
-| `$wipeGiveaways[guild?]` | Delete all giveaways of a guild, or all of them |
+| `$wipeGiveaways[guild?]` | Delete all giveaways of a guild (default: the current one); outside any guild, e.g. in `ready`, all of them |
 
 #### Reading
 
@@ -377,7 +377,7 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 
 | Abuse | Protection |
 |---|---|
-| Spamming join/leave | Per-member cooldown (`entryCooldown`); writes are batched and message refreshes debounced |
+| Spamming join/leave | Per-member cooldown (`entryCooldown`) for buttons and reactions; writes are batched and message refreshes debounced |
 | Holding a bonus role only while joining | Picked members' tickets are re-checked at the draw and the draw is redone with the real count |
 | Dropping a required role, leaving or getting restricted after joining | Every winner is re-checked against all requirements at the draw |
 | Adding bots or the host by hand | Bots never win; an excluded host never wins |
@@ -443,7 +443,7 @@ To run the single-process test files against PostgreSQL instead of SQLite, point
 ```bash
 npm i --no-save pg
 export GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
-node --test test/regression.test.js   # likewise adversarial.test.js and custom.test.js, each on an empty database
+node --test test/regression.test.js   # likewise adversarial, custom and hardening, each on an empty database
 ```
 
 #### Releasing

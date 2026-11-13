@@ -4,6 +4,16 @@
 
 ### Security
 - `$startGiveaway` refuses to post in a channel of another server than the one the command runs in.
+- `$wipeGiveaways` without a guild argument wiped the giveaways of every server, even from a command in one server. It now wipes the current server only; everything is wiped only outside any server (e.g. the `ready` event), and never from a direct message without a guild argument.
+- Reacting and unreacting in a loop had no cooldown (only the button did), so one member could flood entry events and member lookups. `entryCooldown` now applies to reaction joins too.
+- Clicks on a deleted giveaway's message logged an error each time; anyone could flood the log. Each message is reported once.
+
+### Fixed
+- Role arguments (`$addRequiredRoles`, `$addRestrictedRoles`, `$addBonusEntries`, `$setGiveawayPingRole`) accepted user and channel mentions and stored them as roles, creating requirements nobody could meet. Only role IDs and role mentions are accepted now.
+- `$setGiveawayImage` and `$setGiveawayThumbnail` accepted links Discord refuses (any non-http(s) link, or longer than 2048 characters), which made the giveaway message fail and the giveaway be dropped.
+- A translated title or field name longer than Discord allows made every giveaway message fail. Texts are cut to the embed limits.
+- An invalid color in `colors` failed on every giveaway; it now fails at start-up with a clear message.
+- Dependencies: updated `minimatch` (used by TypeORM) to a version without the known ReDoS issues. The remaining `glob` advisory in TypeORM 0.3 only affects file-pattern loading, which this extension doesn't use.
 
 ## 2.1.0 (November 2026)
 

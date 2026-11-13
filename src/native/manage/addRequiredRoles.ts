@@ -5,7 +5,7 @@ import { parseSnowflake } from "../../utils"
 export default new NativeFunction({
     name: "$addRequiredRoles",
     version: "1.0.0",
-    description: "Adds required roles to the giveaway being started or edited, accepts role IDs or mentions",
+    description: "Adds required roles to the giveaway being started or edited, accepts role IDs or role mentions",
     aliases: ["$addRequiredRole"],
     unwrap: true,
     brackets: true,

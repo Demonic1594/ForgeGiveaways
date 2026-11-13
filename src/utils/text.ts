@@ -37,13 +37,25 @@ export function chunk<T>(items: readonly T[], size: number) {
 const SNOWFLAKE = /^\d{17,20}$/
 
 /**
- * Extracts a snowflake from a raw id or a mention such as `<@&123>`/`<@!123>`.
- * Returns null for anything else.
+ * Extracts a role id from a raw id or a role mention (`<@&123>`). A user or
+ * channel mention is not a role, so it is refused instead of being stored as
+ * a requirement nobody can ever meet. Returns null for anything else.
  */
 export function parseSnowflake(input: string | null | undefined) {
     if (!input) return null
-    const id = input.trim().replace(/^<[@#][!&]?(\d+)>$/, "$1")
+    const id = input.trim().replace(/^<@&(\d+)>$/, "$1")
     return SNOWFLAKE.test(id) ? id : null
+}
+
+/** Whether a URL can be shown in an embed (Discord only accepts http and https). */
+export function isEmbedURL(input: string | null | undefined) {
+    if (!input || input.length > 2048) return false
+    try {
+        const { protocol } = new URL(input)
+        return protocol === "http:" || protocol === "https:"
+    } catch {
+        return false
+    }
 }
 
 /**
