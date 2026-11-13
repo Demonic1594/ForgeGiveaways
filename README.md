@@ -26,9 +26,10 @@ ReForgeGiveaways is a reworked, hardened and feature-rich giveaway extension for
 9. [Downtime, Restarts and Crashes](#downtime-restarts-and-crashes)
 10. [Abuse Protection](#abuse-protection)
 11. [Switching from ForgeGiveaways](#switching-from-forgegiveaways)
-12. [Notes and Limits](#notes-and-limits)
-13. [Development](#development)
-14. [Credits and License](#credits-and-license)
+12. [Upgrading](#upgrading)
+13. [Notes and Limits](#notes-and-limits)
+14. [Development](#development)
+15. [Credits and License](#credits-and-license)
 
 <h3 align="center">Why ReForgeGiveaways</h3><hr>
 
@@ -70,7 +71,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > The compiled code is committed, so no build step is needed. To pin a version, use `github:Demonic1594/ReForgeGiveaways#v2.0.0`.
+    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.1.0`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags), starting with `v2.1.0`.
 
 2. Here's an example of how your main file should look:
     ```js
@@ -398,6 +399,23 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 > ℹ️ **Note**\
 > The extension registers itself as `reforge.giveaways`, which only matters if another extension lists it by name in `requireExtensions`.
 
+<h3 align="center">Upgrading</h3><hr>
+
+Install the new release over the old one; there is nothing to migrate by hand. On the first start the database is upgraded in place, and only nullable columns are ever added, so your giveaways and entries are kept.
+
+```bash
+npm i github:Demonic1594/ReForgeGiveaways#v2.1.0
+```
+
+#### From 2.0.0 to 2.1.0
+Your commands keep working. Three things behave differently:
+
+- **Direct messages:** management functions (`$endGiveaway`, `$editGiveaway`, `$deleteGiveaway`, ...) do nothing in a DM unless you pass the guild argument. Before, any command usable in DMs could manage any server's giveaway by its ID. See [Guild Scoping](#guild-scoping).
+- **Network errors at the draw:** if members can't be looked up, `$endGiveaway` returns `false` and the giveaway keeps running (a timed end retries every minute), instead of ending with no winners.
+- **Custom messages (`useDefault: false`):** `$startGiveaway` waits for your `giveawayStart` event and returns nothing if it gave no valid message ID. Clicks your entry events don't answer now get the built-in reply instead of "This interaction failed".
+
+New in 2.1.0: `$rerollGiveawayWinner`, `$clearGiveawayRequirements`, `$clearBonusEntries`, a translatable embed (see [Options](#options)), more `$getGiveaway` properties and sharding support. The full list is in the [changelog](CHANGELOG.md#210-november-2026).
+
 <h3 align="center">Notes and Limits</h3><hr>
 
 - Running giveaways are kept in memory, which assumes one bot process owns each giveaway. Don't point two different bots at the same giveaway database.
@@ -427,6 +445,17 @@ npm i --no-save pg
 export GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
 node --test test/regression.test.js   # likewise adversarial.test.js and custom.test.js, each on an empty database
 ```
+
+#### Releasing
+
+1. Set the new version in `package.json` (`npm version <x.y.z> --no-git-tag-version` also updates `package-lock.json`).
+2. Run `npm test` and `npm run docgen`, and commit `dist/` and `metadata/` with the sources: the package installs straight from GitHub, and CI fails when they are out of date.
+3. Add the release to [CHANGELOG.md](CHANGELOG.md), with its upgrade notes, and to the [Upgrading](#upgrading) section.
+4. Once it is merged into `main`, tag the merge commit and push the tag:
+    ```bash
+    git tag -a v<x.y.z> -m "ReForgeGiveaways <x.y.z>"
+    git push origin v<x.y.z>
+    ```
 
 > ⚠️ **Warning**\
 > Never change the type or length of an existing column in `src/structures/schema.ts`. ForgeDB lets TypeORM synchronize the schema, and on PostgreSQL and MySQL TypeORM changes a column by dropping and re-creating it. Adding nullable columns is safe.

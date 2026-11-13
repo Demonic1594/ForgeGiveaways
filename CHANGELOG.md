@@ -2,6 +2,8 @@
 
 ## 2.1.0 (November 2026)
 
+Tag [`v2.1.0`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.1.0) · [all changes since 2.0.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/e07ec8f...v2.1.0) · [upgrade notes](README.md#from-200-to-210)
+
 A full review of 2.0.0 against the original. The fixes below have tests that fail on 2.0.0, except the shutdown timeout and the commit script.
 
 ### Fixed
@@ -42,6 +44,8 @@ A full review of 2.0.0 against the original. The fixes below have tests that fai
 - `manager.end()` now rejects when members can't be looked up instead of resolving with no winners; `$endGiveaway` returns `false` in that case.
 
 ## 2.0.0 (ReForgeGiveaways, November 2026)
+
+Commit [`e07ec8f`](https://github.com/Demonic1594/ReForgeGiveaways/commit/e07ec8f) (released before tags were used).
 
 Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) 1.1.0 (commit `586fb15`). The fork is a modified version of that program, under the same GPL-3.0 license.
 
