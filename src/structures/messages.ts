@@ -22,12 +22,19 @@ export const DEFAULT_MESSAGES = {
     ended: "⌛ This giveaway has already ended.",
     paused: "⏸️ This giveaway is paused right now, please try again later.",
     unknown: "❓ This giveaway no longer exists.",
+    cooldown: "⏳ Slow down! You can join or leave again {time}.",
+    info: "{status}\n🎟️ **Your entries:** {tickets}\n👥 **Participants:** {count}\n🍀 **Win chance:** {chance}\n⏰ **Ends:** {ends}",
+    infoEntered: "✅ You are entered in the giveaway for **{prize}**.",
+    infoNotEntered: "❌ You haven't entered the giveaway for **{prize}** yet.",
+    infoNotEligible: "🚫 You can't enter the giveaway for **{prize}**: {reason}",
     notReady: "⏳ Giveaways are still loading, please try again in a moment.",
     winners: "🎉 Congratulations to the winner{s} of **{prize}**!\n🏆 {mentions}",
     winnersContinued: "🏆 {mentions}",
     noWinners: "😢 There were no valid entries, so **{prize}** has no winners.",
     reroll: "🔁 Rerolled! Congratulations to the new winner{s} of **{prize}**!\n🏆 {mentions}",
     winnerDM: "🎉 You won **{prize}** in **{guild}**!\n{link}",
+    reasonBot: "bots can't enter giveaways.",
+    reasonHost: "the host can't enter their own giveaway.",
     reasonMissingRoles: "you don't have the required role(s).",
     reasonRestrictedRole: "one of your roles is not allowed to enter.",
     reasonRestrictedMember: "you are not allowed to enter.",
@@ -41,6 +48,8 @@ export const DEFAULT_MESSAGES = {
 export type GiveawayMessages = typeof DEFAULT_MESSAGES
 
 const REASON_KEYS: Record<GiveawayDenyReason, keyof GiveawayMessages> = {
+    [GiveawayDenyReason.Bot]: "reasonBot",
+    [GiveawayDenyReason.Host]: "reasonHost",
     [GiveawayDenyReason.MissingRoles]: "reasonMissingRoles",
     [GiveawayDenyReason.RestrictedRole]: "reasonRestrictedRole",
     [GiveawayDenyReason.RestrictedMember]: "reasonRestrictedMember",

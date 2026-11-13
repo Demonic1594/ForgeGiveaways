@@ -33,6 +33,18 @@ Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways
 - Database connection is retried with backoff at boot; calls time out after 30 s instead of hanging.
 - Slow clicks are deferred within Discord's 3 s limit.
 
+### Abuse resistance (found by adversarial testing)
+- **Quadratic join cost:** every join rebuilt the entry index, so 20,000 joins took ~11 s of blocked event loop (a mass-join raid could freeze the bot). Joins are O(1) now; 1,000,000 joins take ~0.3 s.
+- **Ended giveaway brought back to life:** an entry write queued before an end and run after it could overwrite the ended state with "running". Background writes now always save the current state; a test reproduces the exact interleaving and fails on the old code.
+- **Winner who never entered:** `$removeGiveawayEntry` on an ended giveaway removed a winner's entry. Entries of ended giveaways are now read-only (found by the fuzzer).
+- **Bonus role held only while joining:** the joined-with ticket count was used for uncached members. The draw now re-checks picked members' live roles and redraws with corrected counts (cheater's odds verified to drop from ~99% to a fair 50%).
+- Failed background entry writes are retried instead of being lost until the next change.
+- Bots can never enter or win; the host can be excluded.
+- Per-member join/leave cooldown.
+- Caps on prize length, winners, entry cap and bonus amounts; long prizes are shortened inside chat messages so winner mentions always fit.
+- Event snapshots are built only when something listens, and cloning is ~10x faster (13 ms instead of 132 ms at 1,000,000 entries).
+- Reaction emoji match with or without the U+FE0F variation selector.
+
 ### Security
 - Management functions (`$editGiveaway`, `$endGiveaway`, `$rerollGiveaway`, `$cancelGiveaway`, `$pauseGiveaway`, `$resumeGiveaway`, `$extendGiveaway`, `$shortenGiveaway`, `$addGiveawayEntry`, `$removeGiveawayEntry`, `$deleteGiveaway`) only act on giveaways of the given guild, or the current guild when none is given. `$editGiveaway`'s existing guild argument must now match.
 - Validation for winners, duration, prize and role IDs.
@@ -51,6 +63,8 @@ Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways
 - Requirements: `$setRequiredRolesMode`, `$setMinimumAccountAge`, `$setMinimumMemberAge`, `$setMaxEntries`
 - Bonus entries: `$addBonusEntries` (weighted draw)
 - Display: `$setGiveawayDescription`, `$setGiveawayColor`, `$setGiveawayImage`, `$setGiveawayThumbnail`, `$setGiveawayPingRole`
+- Info button (`showInfoButton`): private status, tickets, win chance and deny reason for the clicker
+- `$excludeGiveawayHost`, `$giveawayWinChance`, `$giveawayIsWinner`, `$giveawayURL`; deny reasons `bot` and `host`; options `showInfoButton`, `entryCooldown`
 - Getters: `$giveawayEndTimestamp`, `$giveawayTimeLeft`, `$giveawayIsPaused`, `$giveawayIsCancelled`, `$giveawayEndedAt`, `$giveawayEntriesCount`, `$giveawayTotalTickets`, `$giveawayMaxEntries`, `$giveawayDescription`, `$giveawayMinAccountAge`, `$giveawayMinMemberAge`, `$giveawayRequiredRolesMode`, `$giveawayBonusEntries`, `$giveawayHasEntered`, `$giveawayEntryWeight`, `$giveawayDenyReason`, plus matching properties for `$getGiveaway`
 - `$wipeGiveaways[guild]` wipes one guild only
 - Events: `giveawayCancel`, `giveawayPause`, `giveawayResume`; `giveawayEntryRevoke` carries the reason

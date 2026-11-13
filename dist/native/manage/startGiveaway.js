@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const forgescript_1 = require("@tryforge/forgescript");
 const __1 = require("../..");
+const structures_1 = require("../../structures");
 exports.default = new forgescript_1.NativeFunction({
     name: "$startGiveaway",
     version: "1.0.0",
@@ -49,8 +50,10 @@ exports.default = new forgescript_1.NativeFunction({
     ],
     output: forgescript_1.ArgType.String,
     async execute(ctx, [channel, host, prize, duration, winners]) {
-        if (winners != null && !(Number.isInteger(winners) && winners >= 1))
-            return this.customError("Winners must be a whole number of at least 1");
+        if (winners != null && !(Number.isInteger(winners) && winners >= 1 && winners <= structures_1.GiveawayLimits.count))
+            return this.customError(`Winners must be a whole number from 1 to ${structures_1.GiveawayLimits.count}`);
+        if (prize.trim().length > structures_1.GiveawayLimits.prize)
+            return this.customError(`Prize must be at most ${structures_1.GiveawayLimits.prize} characters`);
         if (!(duration > 0))
             return this.customError("Duration must be greater than 0");
         if (!prize.trim())

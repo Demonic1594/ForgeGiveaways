@@ -1,10 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Renderer = exports.ENTRY_BUTTON_ID = void 0;
+exports.Renderer = exports.INFO_BUTTON_ID = exports.ENTRY_BUTTON_ID = void 0;
 const discord_js_1 = require("discord.js");
 const messages_1 = require("./messages");
 const utils_1 = require("../utils");
 exports.ENTRY_BUTTON_ID = "giveawayEntry";
+exports.INFO_BUTTON_ID = "giveawayInfo";
 const roleList = (ids) => ids?.map((id) => `<@&${id}>`).join(", ");
 /**
  * Builds the default giveaway embeds and components. Kept separate from the
@@ -103,7 +104,11 @@ class Renderer {
             .setDisabled(g.isPaused());
         if (this.opts.emoji)
             button.setEmoji(this.opts.emoji);
-        return [new discord_js_1.ActionRowBuilder().addComponents(button).toJSON()];
+        const row = new discord_js_1.ActionRowBuilder().addComponents(button);
+        if (this.opts.showInfoButton) {
+            row.addComponents(new discord_js_1.ButtonBuilder().setCustomId(exports.INFO_BUTTON_ID).setEmoji("ℹ️").setStyle(discord_js_1.ButtonStyle.Secondary));
+        }
+        return [row.toJSON()];
     }
     /** Full payload for the giveaway message in its current state. */
     payload(g) {

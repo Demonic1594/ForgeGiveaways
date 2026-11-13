@@ -168,7 +168,8 @@ test("README examples and every new function compile", async () => {
          $giveawayEndedAt $giveawayEntriesCount $giveawayTotalTickets $giveawayMaxEntries
          $giveawayDescription $giveawayMinAccountAge $giveawayMinMemberAge $giveawayRequiredRolesMode
          $giveawayBonusEntries $giveawayHasEntered[1;$authorID] $giveawayEntryWeight[1;$authorID]
-         $giveawayDenyReason $newGiveaway[entriesCount] $oldGiveaway`,
+         $giveawayDenyReason $newGiveaway[entriesCount] $oldGiveaway
+         $giveawayWinChance[1;$authorID] $giveawayIsWinner[1;$authorID] $giveawayURL $excludeGiveawayHost`,
         `$interactionReply[$ephemeral You can't join: $giveawayDenyReason]`,
     ]
     const { FunctionManager } = require("@tryforge/forgescript")

@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const forgescript_1 = require("@tryforge/forgescript");
 const builder_1 = __importDefault(require("../../functions/builder"));
+const structures_1 = require("../../structures");
 exports.default = new forgescript_1.NativeFunction({
     name: "$setGiveawayDescription",
     version: "2.0.0",
@@ -21,7 +22,7 @@ exports.default = new forgescript_1.NativeFunction({
         },
     ],
     execute(ctx, [text]) {
-        const error = text.length > 2000 ? "Description must be at most 2000 characters" : null;
+        const error = text.length > structures_1.GiveawayLimits.description ? `Description must be at most ${structures_1.GiveawayLimits.description} characters` : null;
         if (error)
             return this.customError(error);
         const b = (0, builder_1.default)(ctx);

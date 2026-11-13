@@ -14,6 +14,8 @@ export interface IGiveawayRequirements {
     minAccountAge?: number;
     /** Minimum time in ms since the member joined the guild. */
     minMemberAge?: number;
+    /** Whether the host is excluded from entering and winning. */
+    excludeHost?: boolean;
 }
 export interface IGiveawayBonusEntry {
     /** The role granting the bonus. */
@@ -57,7 +59,20 @@ export interface IGiveaway extends IGiveawayStartOptions {
 /**
  * Why a member could not enter a giveaway. `null` means they can.
  */
+/** Hard limits, mostly so values fit the database columns and Discord. */
+export declare const GiveawayLimits: {
+    /** Longest prize, so announcements always fit around it. */
+    readonly prize: 1024;
+    /** Largest winners count / entry cap (32-bit integer column). */
+    readonly count: number;
+    /** Largest bonus per role, so ticket totals stay exact. */
+    readonly bonus: 1000000;
+    /** Longest description (embed limit with room for the rest). */
+    readonly description: 2000;
+};
 export declare enum GiveawayDenyReason {
+    Bot = "bot",
+    Host = "host",
     MissingRoles = "missingRoles",
     RestrictedRole = "restrictedRole",
     RestrictedMember = "restrictedMember",
@@ -147,6 +162,16 @@ export declare class Giveaway implements IGiveaway {
     weightOf(userID: Snowflake): number;
     /** Total number of tickets across all entries. */
     totalTickets(): number;
+    /**
+     * Estimated chance (0 to 1) that a user ends up among the winners, if all
+     * current entrants stay eligible. Exact without bonus entries
+     * (k winners / n entries); with them, 1 - (1 - w/T)^k.
+     */
+    winChance(userID: Snowflake): number;
+    /** Whether a user is one of the current winners. */
+    isWinner(userID: Snowflake): boolean;
+    /** Link to the giveaway message, if it has one. */
+    url(): string | null;
     /** Computes a member's ticket count from the bonus entry roles. */
     computeWeight(member: AnyMember): number;
     /**

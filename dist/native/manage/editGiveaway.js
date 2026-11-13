@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const forgescript_1 = require("@tryforge/forgescript");
 const __1 = require("../..");
+const structures_1 = require("../../structures");
 const scope_1 = require("../../functions/scope");
 exports.default = new forgescript_1.NativeFunction({
     name: "$editGiveaway",
@@ -46,8 +47,10 @@ exports.default = new forgescript_1.NativeFunction({
     ],
     output: forgescript_1.ArgType.Boolean,
     async execute(ctx, [id, guild, host, prize, winners]) {
-        if (winners != null && !(Number.isInteger(winners) && winners >= 1))
-            return this.customError("Winners must be a whole number of at least 1");
+        if (winners != null && !(Number.isInteger(winners) && winners >= 1 && winners <= structures_1.GiveawayLimits.count))
+            return this.customError(`Winners must be a whole number from 1 to ${structures_1.GiveawayLimits.count}`);
+        if (prize && prize.trim().length > structures_1.GiveawayLimits.prize)
+            return this.customError(`Prize must be at most ${structures_1.GiveawayLimits.prize} characters`);
         // The guild argument used to only resolve the host; it now also has
         // to match the giveaway, so one guild can't edit another's giveaway.
         if (!(await (0, scope_1.scopedGiveaway)(ctx, id, guild)))

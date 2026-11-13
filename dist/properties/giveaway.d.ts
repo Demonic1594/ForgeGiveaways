@@ -28,7 +28,9 @@ export declare enum GiveawayProperty {
     minAccountAge = "minAccountAge",
     minMemberAge = "minMemberAge",
     bonusEntries = "bonusEntries",
-    description = "description"
+    description = "description",
+    excludeHost = "excludeHost",
+    url = "url"
 }
 export declare const GiveawayProperties: import("../functions/defineProperties").Properties<typeof GiveawayProperty, Giveaway>;
 //# sourceMappingURL=giveaway.d.ts.map

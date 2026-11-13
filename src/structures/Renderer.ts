@@ -12,12 +12,14 @@ import { format, GiveawayMessages } from "./messages"
 import { formatDuration, truncate } from "../utils"
 
 export const ENTRY_BUTTON_ID = "giveawayEntry"
+export const INFO_BUTTON_ID = "giveawayInfo"
 
 export interface IRendererOptions {
     emoji: string
     buttonLabel: string
     buttonStyle: ButtonStyle
     showEntryCount: boolean
+    showInfoButton: boolean
     useReactions: boolean
     colors: { active: ColorResolvable, paused: ColorResolvable, ended: ColorResolvable, cancelled: ColorResolvable }
     messages: GiveawayMessages
@@ -123,7 +125,11 @@ export class Renderer {
             .setStyle(this.opts.buttonStyle)
             .setDisabled(g.isPaused())
         if (this.opts.emoji) button.setEmoji(this.opts.emoji)
-        return [new ActionRowBuilder<ButtonBuilder>().addComponents(button).toJSON()]
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button)
+        if (this.opts.showInfoButton) {
+            row.addComponents(new ButtonBuilder().setCustomId(INFO_BUTTON_ID).setEmoji("ℹ️").setStyle(ButtonStyle.Secondary))
+        }
+        return [row.toJSON()]
     }
 
     /** Full payload for the giveaway message in its current state. */

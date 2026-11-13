@@ -36,6 +36,8 @@ var GiveawayProperty;
     GiveawayProperty["minMemberAge"] = "minMemberAge";
     GiveawayProperty["bonusEntries"] = "bonusEntries";
     GiveawayProperty["description"] = "description";
+    GiveawayProperty["excludeHost"] = "excludeHost";
+    GiveawayProperty["url"] = "url";
 })(GiveawayProperty || (exports.GiveawayProperty = GiveawayProperty = {}));
 const join = (arr, sep) => arr?.join(sep ?? ", ");
 exports.GiveawayProperties = (0, defineProperties_1.default)({
@@ -68,5 +70,7 @@ exports.GiveawayProperties = (0, defineProperties_1.default)({
     minMemberAge: (i) => i?.requirements?.minMemberAge,
     bonusEntries: (i, sep) => i?.bonusEntries?.map((b) => `${b.roleID}:${b.amount}`).join(sep ?? ", "),
     description: (i) => i?.display?.description,
+    excludeHost: (i) => (i ? !!i.requirements?.excludeHost : undefined),
+    url: (i) => i?.url() ?? undefined,
 });
 //# sourceMappingURL=giveaway.js.map

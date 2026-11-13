@@ -31,6 +31,15 @@ export interface IForgeGiveawaysOptions {
     /** Whether the entry button shows a live entry count, e.g. "Join (42)". Defaults to `true`. */
     showEntryCount?: boolean
 
+    /** Show an "ℹ️" button that tells members their status, tickets and win chance. Defaults to `true`. */
+    showInfoButton?: boolean
+
+    /**
+     * Minimum ms between two join/leave clicks of the same member on the same
+     * giveaway, against spam. `0` disables it. Defaults to `3000`.
+     */
+    entryCooldown?: number
+
     /** Whether winners get a direct message. Defaults to `false`. */
     dmWinners?: boolean
 
@@ -77,6 +86,8 @@ export class ForgeGiveaways extends ForgeExtension {
         o.buttonLabel ||= "Join"
         o.buttonStyle ??= ButtonStyle.Success
         o.showEntryCount ??= true
+        o.showInfoButton ??= true
+        o.entryCooldown = Math.max(0, o.entryCooldown ?? 3000)
         o.dmWinners ??= false
         o.entryFlushDelay = Math.max(0, o.entryFlushDelay ?? 1000)
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000)

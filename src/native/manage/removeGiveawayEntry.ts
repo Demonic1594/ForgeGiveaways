@@ -5,7 +5,7 @@ import { scopedGiveaway } from "../../functions/scope"
 export default new NativeFunction({
     name: "$removeGiveawayEntry",
     version: "2.0.0",
-    description: "Removes a user's entry from a giveaway, returns bool",
+    description: "Removes a user's entry from a running or paused giveaway, returns bool",
     unwrap: true,
     brackets: true,
     args: [

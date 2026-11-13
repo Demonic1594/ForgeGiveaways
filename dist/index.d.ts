@@ -20,6 +20,13 @@ export interface IForgeGiveawaysOptions {
     buttonStyle?: ButtonStyle;
     /** Whether the entry button shows a live entry count, e.g. "Join (42)". Defaults to `true`. */
     showEntryCount?: boolean;
+    /** Show an "ℹ️" button that tells members their status, tickets and win chance. Defaults to `true`. */
+    showInfoButton?: boolean;
+    /**
+     * Minimum ms between two join/leave clicks of the same member on the same
+     * giveaway, against spam. `0` disables it. Defaults to `3000`.
+     */
+    entryCooldown?: number;
     /** Whether winners get a direct message. Defaults to `false`. */
     dmWinners?: boolean;
     /** Embed colors of the default messages. */

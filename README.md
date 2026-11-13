@@ -89,6 +89,8 @@ ForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extensi
 | `buttonLabel` | `Join` | Button label |
 | `buttonStyle` | `ButtonStyle.Success` | Button style |
 | `showEntryCount` | `true` | Show the live entry count on the button, e.g. "Join (42)" |
+| `showInfoButton` | `true` | Add an "ℹ️" button that privately shows a member their status, tickets, win chance and why they can't enter |
+| `entryCooldown` | `3000` | Minimum ms between two join/leave clicks of one member on one giveaway (anti-spam); `0` disables it |
 | `dmWinners` | `false` | Send winners a direct message |
 | `colors` | green, yellow, red, grey | Embed colors for `active`, `paused`, `ended`, `cancelled` |
 | `messages` | see `DEFAULT_MESSAGES` | Override any text of the default messages |
@@ -145,6 +147,7 @@ Role arguments accept IDs or mentions such as `<@&123...>`; anything else is rej
 | `$setMinimumAccountAge[time]` | Discord account must be at least this old |
 | `$setMinimumMemberAge[time]` | Must have been in the server this long |
 | `$addBonusEntries[role;amount]` | Members with the role get `amount` extra tickets (bonuses add up) |
+| `$excludeGiveawayHost[exclude?]` | The host can't enter or win |
 | `$setMaxEntries[amount]` | Cap the number of entrants (`0` removes the cap) |
 | `$setGiveawayDescription[text]`, `$setGiveawayColor[color]`, `$setGiveawayImage[url]`, `$setGiveawayThumbnail[url]`, `$setGiveawayPingRole[role]` | Default message look |
 
@@ -163,7 +166,7 @@ Role arguments accept IDs or mentions such as `<@&123...>`; anything else is rej
 | `$deleteGiveaway[id;guild?]` | Delete permanently |
 | `$wipeGiveaways[guild?]` | Delete all giveaways of a guild, or all of them |
 
-**Reading**: `$getGiveaway[id;property?;sep?]`, `$getAllGiveaways[property?;sep?]`, `$getGuildGiveaways[guild;all|active|paused|ended;property?;sep?]`, `$giveawayExists[id]`, and `$giveawayX[id?]` for every field: `ID`, `Prize`, `Duration`, `Timestamp`, `EndTimestamp`, `TimeLeft`, `EndedAt`, `HasEnded`, `IsPaused`, `IsCancelled`, `WinnersCount`, `Winners`, `PreviousWinners`, `Entries`, `EntriesCount`, `TotalTickets`, `MaxEntries`, `HostID`, `GuildID`, `ChannelID`, `MessageID`, `RequiredRoles`, `RequiredRolesMode`, `RestrictedRoles`, `RestrictedMembers`, `MinAccountAge`, `MinMemberAge`, `BonusEntries`, `Description`. Also `$giveawayHasEntered[id;user]`, `$giveawayEntryWeight[id;user]`, and in events `$newGiveaway[property]`, `$oldGiveaway[property]` and `$giveawayDenyReason`.
+**Reading**: `$getGiveaway[id;property?;sep?]`, `$getAllGiveaways[property?;sep?]`, `$getGuildGiveaways[guild;all|active|paused|ended;property?;sep?]`, `$giveawayExists[id]`, and `$giveawayX[id?]` for every field: `ID`, `Prize`, `Duration`, `Timestamp`, `EndTimestamp`, `TimeLeft`, `EndedAt`, `HasEnded`, `IsPaused`, `IsCancelled`, `WinnersCount`, `Winners`, `PreviousWinners`, `Entries`, `EntriesCount`, `TotalTickets`, `MaxEntries`, `HostID`, `GuildID`, `ChannelID`, `MessageID`, `RequiredRoles`, `RequiredRolesMode`, `RestrictedRoles`, `RestrictedMembers`, `MinAccountAge`, `MinMemberAge`, `BonusEntries`, `Description`. Also `$giveawayHasEntered[id;user]`, `$giveawayEntryWeight[id;user]`, `$giveawayWinChance[id;user]` (estimated %), `$giveawayIsWinner[id;user]`, `$giveawayURL[id?]`, and in events `$newGiveaway[property]`, `$oldGiveaway[property]` and `$giveawayDenyReason`.
 
 The full list with argument details is in [metadata/functions.json](metadata/functions.json).
 
@@ -223,7 +226,7 @@ module.exports = {
 }
 ```
 
-`$giveawayDenyReason` is one of `missingRoles`, `restrictedRole`, `restrictedMember`, `accountTooNew`, `memberTooNew`, `entriesFull`, `ended`, `paused`.
+`$giveawayDenyReason` is one of `bot`, `host`, `missingRoles`, `restrictedRole`, `restrictedMember`, `accountTooNew`, `memberTooNew`, `entriesFull`, `ended`, `paused`.
 
 ### Events
 
@@ -252,11 +255,27 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 
 What can't be recovered: up to one second of entry clicks if the process is killed hard (see `entryFlushDelay`), and button clicks made while the bot was offline, which Discord rejects on its side.
 
+## Abuse protection
+
+| Abuse | Protection |
+|---|---|
+| Spamming join/leave to flood events or the database | Per-member cooldown (`entryCooldown`); entry writes are batched and message refreshes debounced anyway |
+| Holding a bonus role only while joining | At the draw, each picked member's tickets are re-checked against their current roles; if they differ, the draw is redone with the real count |
+| Joining with a required role, then dropping it, leaving the server, or getting restricted | Every winner is re-checked against all requirements at the draw |
+| Entering bots or the host (when excluded) through `$addGiveawayEntry` | Bots never win; an excluded host never wins, even if added by hand |
+| Prizes with `@everyone`, role pings or `{placeholders}` | Messages only ever ping the winners; placeholders inside a prize are not expanded |
+| Huge prizes or winner counts | Prize up to 1,024 characters, counts up to 2^31 - 1, bonuses up to 1,000,000; announcements are split to stay within Discord's limits and always mention every winner |
+| Mass joins on big giveaways | Joining is O(1) (100,000 joins take well under a second) |
+| Touching another server's giveaway by ID | Management functions are scoped to their own guild |
+
+Draw fairness is tested statistically (chi-square over thousands of draws), and a seeded fuzzer runs thousands of random concurrent operations with injected database failures, checking that memory, database and timers always agree. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
+
 ## Notes and limits
 
 - Active giveaways are cached in memory, which assumes one bot process owns the giveaway table (the normal setup). Don't point two running bots at the same giveaway database.
 - With the default `entryFlushDelay` of one second, a hard kill can lose up to the last second of entry clicks. Normal shutdowns (`SIGINT`/`SIGTERM`) save them. Set it to `0` if that matters more than write volume.
-- Bonus entries are counted from the member's roles at the time of the draw when the member is cached, otherwise from the roles they had when they entered.
+- Bonus entries count the roles a member has at the time of the draw. A draw is redone, with the corrected ticket count, whenever a picked member's roles have changed since joining; across the whole process this can tilt odds by about one percent in edge cases, never in favor of someone who dropped a bonus role.
+- Entries of an ended giveaway can't be changed; they are the record the winners were drawn from.
 - MongoDB support follows the original schema but has not been tested against a live MongoDB server.
 
 ## Development

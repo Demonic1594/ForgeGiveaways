@@ -2,11 +2,13 @@ import { ButtonStyle, ColorResolvable, EmbedBuilder } from "discord.js";
 import { Giveaway } from "./Giveaway";
 import { GiveawayMessages } from "./messages";
 export declare const ENTRY_BUTTON_ID = "giveawayEntry";
+export declare const INFO_BUTTON_ID = "giveawayInfo";
 export interface IRendererOptions {
     emoji: string;
     buttonLabel: string;
     buttonStyle: ButtonStyle;
     showEntryCount: boolean;
+    showInfoButton: boolean;
     useReactions: boolean;
     colors: {
         active: ColorResolvable;

@@ -1,5 +1,6 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import builder from "../../functions/builder"
+import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
     name: "$setMaxEntries",
@@ -17,7 +18,7 @@ export default new NativeFunction({
         },
     ],
     execute(ctx, [amount]) {
-        if (!Number.isInteger(amount) || amount < 0) return this.customError("Amount must be a whole number of at least 0")
+        if (!Number.isInteger(amount) || amount < 0 || amount > GiveawayLimits.count) return this.customError(`Amount must be a whole number from 0 to ${GiveawayLimits.count}`)
         builder(ctx).maxEntries = amount || null
         return this.success()
     }

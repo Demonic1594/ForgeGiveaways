@@ -18,9 +18,29 @@ const WATCHDOG_INTERVAL = 30_000;
 const RETRY_DELAY = 60_000;
 /** After this long past the deadline, end even if the guild is still unavailable. */
 const MAX_POSTPONE = 24 * 36e5;
+/** Retry delay for a failed background write of entries. */
+const RETRY_FLUSH = 5_000;
 /** How long a call waits for the database before giving up. */
 const READY_TIMEOUT = 30_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms).unref?.());
+/** Prize as used inside chat messages, short enough to never push winner mentions out. */
+const shortPrize = (g) => (0, utils_1.truncate)(g.prize, 200);
+/** Throws a RangeError for options outside {@link GiveawayLimits}. */
+function validate(o) {
+    const fail = (msg) => { throw new RangeError(msg); };
+    if (o.prize != null && o.prize.trim().length > structures_1.GiveawayLimits.prize)
+        fail(`Giveaway prize must be at most ${structures_1.GiveawayLimits.prize} characters`);
+    if (o.winnersCount != null && Math.floor(o.winnersCount) > structures_1.GiveawayLimits.count)
+        fail(`Giveaway winners count must be at most ${structures_1.GiveawayLimits.count}`);
+    if (o.maxEntries != null && o.maxEntries > structures_1.GiveawayLimits.count)
+        fail(`Giveaway max entries must be at most ${structures_1.GiveawayLimits.count}`);
+    for (const b of o.bonusEntries ?? []) {
+        if (!Number.isInteger(b.amount) || b.amount < 1 || b.amount > structures_1.GiveawayLimits.bonus)
+            fail(`Bonus entries must be between 1 and ${structures_1.GiveawayLimits.bonus}`);
+    }
+    if ((o.display?.description?.length ?? 0) > structures_1.GiveawayLimits.description)
+        fail(`Giveaway description must be at most ${structures_1.GiveawayLimits.description} characters`);
+}
 /**
  * Owns the life cycle of every giveaway: start, end, reroll, edit, pause,
  * resume, extend, cancel and entries.
@@ -60,6 +80,7 @@ class GiveawaysManager {
             buttonLabel: o.buttonLabel,
             buttonStyle: o.buttonStyle,
             showEntryCount: o.showEntryCount,
+            showInfoButton: o.showInfoButton,
             useReactions: !!o.useReactions,
             colors: o.colors,
             messages: o.messages,
@@ -117,6 +138,10 @@ class GiveawaysManager {
     // Helpers
     // ----------------------------------------------------------------------
     emit = (...args) => this.giveaways.emitter.emit(...args);
+    /** Whether anything listens to an event, so snapshots are only built when needed. */
+    wants(event) {
+        return this.giveaways.emitter.listenerCount(event) > 0;
+    }
     async getChannel(channelID) {
         const cached = this.client.channels.cache.get(channelID);
         const chan = cached ?? (await this.client.channels.fetch(channelID).catch(() => null));
@@ -159,16 +184,35 @@ class GiveawaysManager {
     /** Queues a coalesced write of entry changes. */
     queueFlush(g) {
         const delay = this.giveaways.options.entryFlushDelay;
-        if (delay <= 0)
-            return this.save(g);
-        if (this.#flushTimers.has(g.id))
+        if (delay <= 0) {
+            // Write now; if that fails the change is still in memory, so keep
+            // retrying in the background instead of losing it on restart.
+            return this.save(g).catch((e) => {
+                (0, noop_1.default)(e);
+                this.#scheduleFlush(g.id, RETRY_FLUSH);
+            });
+        }
+        this.#scheduleFlush(g.id, delay);
+    }
+    #scheduleFlush(id, delay) {
+        if (this.#flushTimers.has(id))
             return;
         const t = setTimeout(() => {
-            this.#flushTimers.delete(g.id);
-            this.#lock.run(g.id, () => structures_1.Database.set(g)).catch(noop_1.default);
+            this.#flushTimers.delete(id);
+            this.#lock.run(id, async () => {
+                // Always write the *current* state. Writing the object captured
+                // when the timer was set could overwrite a newer saved change
+                // (e.g. resurrect a giveaway that was ended meanwhile).
+                const cur = await structures_1.Database.get(id);
+                if (cur)
+                    await structures_1.Database.set(cur);
+            }).catch((e) => {
+                (0, noop_1.default)(e);
+                this.#scheduleFlush(id, RETRY_FLUSH);
+            });
         }, delay);
         t.unref?.();
-        this.#flushTimers.set(g.id, t);
+        this.#flushTimers.set(id, t);
     }
     /** Queues a refresh of the giveaway message (live entry count). */
     queueRefresh(g) {
@@ -238,6 +282,7 @@ class GiveawaysManager {
             throw new RangeError("Giveaway winners count must be at least 1");
         if (!options.prize?.trim())
             throw new RangeError("Giveaway prize must not be empty");
+        validate(options);
         const giveaway = structures_1.Database.create({ ...options, duration, winnersCount, prize: options.prize.trim() });
         if (giveaway.maxEntries != null && !(giveaway.maxEntries >= 1))
             giveaway.maxEntries = null;
@@ -463,6 +508,7 @@ class GiveawaysManager {
             const giveaway = (await structures_1.Database.get(id))?.clone();
             if (!giveaway || giveaway.hasEnded)
                 return null;
+            validate(options);
             const oldGiveaway = giveaway.clone();
             if (options.prize?.trim())
                 giveaway.prize = options.prize.trim();
@@ -557,11 +603,12 @@ class GiveawaysManager {
                 return null;
             const userID = member.user.id;
             if (!giveaway.hasEnded && !giveaway.isPaused() && giveaway.hasEntered(userID)) {
-                const old = giveaway.clone();
+                const old = this.wants("giveawayEntryRemove") ? giveaway.clone() : null;
                 giveaway.removeEntry(userID);
                 await this.queueFlush(giveaway);
                 this.queueRefresh(giveaway);
-                this.emit("giveawayEntryRemove", old, giveaway.clone(), source, user);
+                if (old)
+                    this.emit("giveawayEntryRemove", old, giveaway.clone(), source, user);
                 return { action: "removed", giveaway };
             }
             return this.#add(giveaway, member, source, user);
@@ -582,31 +629,35 @@ class GiveawaysManager {
     async #add(giveaway, member, source, user) {
         const reason = giveaway.denyReason(member, true);
         if (reason) {
-            this.emit("giveawayEntryRevoke", giveaway.clone(), source, user, reason);
+            if (this.wants("giveawayEntryRevoke"))
+                this.emit("giveawayEntryRevoke", giveaway.clone(), source, user, reason);
             return { action: "denied", reason, giveaway };
         }
-        const old = giveaway.clone();
+        const old = this.wants("giveawayEntryAdd") ? giveaway.clone() : null;
         giveaway.addEntry(member.user.id, giveaway.computeWeight(member));
         await this.queueFlush(giveaway);
         this.queueRefresh(giveaway);
-        this.emit("giveawayEntryAdd", old, giveaway.clone(), source, user);
+        if (old)
+            this.emit("giveawayEntryAdd", old, giveaway.clone(), source, user);
         return { action: "added", giveaway };
     }
     /**
      * Removes an entry. Returns the giveaway, or null if it was not entered/active.
-     * @param force Also remove entries while paused or ended.
+     * @param force Also remove entries while paused. Entries of an ended
+     * giveaway are never changed: they are the record the winners were drawn
+     * from (removing one used to leave a winner who "never entered").
      */
     async leave(id, userID, source, user, force = false) {
         await this.#awaitReady();
         return this.#lock.run(id, async () => {
             const giveaway = await structures_1.Database.get(id);
-            if (!giveaway || (!force && !giveaway.isActive()) || !giveaway.hasEntered(userID))
+            if (!giveaway || giveaway.hasEnded || (!force && !giveaway.isActive()) || !giveaway.hasEntered(userID))
                 return null;
-            const old = giveaway.clone();
+            const old = source && user && this.wants("giveawayEntryRemove") ? giveaway.clone() : null;
             giveaway.removeEntry(userID);
             await (force ? this.save(giveaway) : this.queueFlush(giveaway));
             this.queueRefresh(giveaway);
-            if (source && user)
+            if (old)
                 this.emit("giveawayEntryRemove", old, giveaway.clone(), source, user);
             return giveaway;
         });
@@ -651,29 +702,58 @@ class GiveawaysManager {
         if (!guild)
             return [];
         const weighted = !!g.bonusEntries?.length || !!(g.entryWeights && Object.keys(g.entryWeights).length);
-        const order = weighted
-            ? (0, utils_1.weightedOrder)(pool, (id) => {
-                const m = guild.members.cache.get(id);
-                return m ? g.computeWeight(m) : g.weightOf(id);
-            })
-            : (0, utils_1.shuffle)(pool);
-        const winners = [];
-        let i = 0;
-        while (winners.length < count && i < order.length) {
-            const need = count - winners.length;
-            const batch = order.slice(i, i + Math.min(100, Math.max(need * 2, 10)));
-            i += batch.length;
-            const members = await this.fetchMembers(guild, batch);
-            for (const id of batch) {
-                const m = members.get(id);
-                if (m && g.requirementDenyReason(m) === null) {
+        // Members fetched so far (null = left the server), and ticket counts
+        // corrected from their live roles.
+        const fetched = new Map();
+        const corrected = new Map();
+        const weightOf = (id) => {
+            const fixed = corrected.get(id);
+            if (fixed !== undefined)
+                return fixed;
+            const m = guild.members.cache.get(id);
+            return m ? g.computeWeight(m) : g.weightOf(id);
+        };
+        // Anti-abuse: uncached members are ordered by the ticket count saved
+        // when they joined. If a drawn member's live roles give a different
+        // count (e.g. a bonus role held only while joining), the draw is
+        // redone with the corrected count. Each restart fixes at least one
+        // member and reuses everything already fetched.
+        for (let attempt = 0;; attempt++) {
+            const order = weighted ? (0, utils_1.weightedOrder)(pool, weightOf) : (0, utils_1.shuffle)(pool);
+            const winners = [];
+            let restart = false;
+            let i = 0;
+            while (winners.length < count && i < order.length && !restart) {
+                const need = count - winners.length;
+                const batch = order.slice(i, i + Math.min(100, Math.max(need * 2, 10)));
+                i += batch.length;
+                const missing = batch.filter((id) => !fetched.has(id));
+                if (missing.length) {
+                    const got = await this.fetchMembers(guild, missing);
+                    for (const id of missing)
+                        fetched.set(id, got.get(id) ?? null);
+                }
+                for (const id of batch) {
+                    const m = fetched.get(id);
+                    if (!m || g.requirementDenyReason(m) !== null)
+                        continue;
+                    if (weighted && attempt < 50 && !corrected.has(id)) {
+                        const used = weightOf(id);
+                        const live = g.computeWeight(m);
+                        corrected.set(id, live);
+                        if (live !== used) {
+                            restart = true;
+                            break;
+                        }
+                    }
                     winners.push(id);
                     if (winners.length === count)
                         break;
                 }
             }
+            if (!restart)
+                return winners;
         }
-        return winners;
     }
     async fetchMembers(guild, ids) {
         const found = new Map();
@@ -709,18 +789,18 @@ class GiveawaysManager {
         const s = winners.length === 1 ? "" : "s";
         if (!winners.length) {
             await (msg
-                ? msg.reply({ content: (0, messages_1.format)(m.noWinners, { prize: g.prize }), allowedMentions: { parse: [], repliedUser: false } })
-                : chan.send({ content: (0, messages_1.format)(m.noWinners, { prize: g.prize }), allowedMentions: { parse: [] } })).catch(noop_1.default);
+                ? msg.reply({ content: (0, messages_1.format)(m.noWinners, { prize: shortPrize(g) }), allowedMentions: { parse: [], repliedUser: false } })
+                : chan.send({ content: (0, messages_1.format)(m.noWinners, { prize: shortPrize(g) }), allowedMentions: { parse: [] } })).catch(noop_1.default);
             return;
         }
-        const head = (0, messages_1.format)(kind === "winners" ? m.winners : m.reroll, { prize: g.prize, s, mentions: "" });
+        const head = (0, messages_1.format)(kind === "winners" ? m.winners : m.reroll, { prize: shortPrize(g), s, mentions: "" });
         const room = Math.max(200, MAX_MESSAGE - head.length - 10);
         const groups = (0, utils_1.chunk)(winners, 90);
         let first = true;
         for (const group of groups) {
             for (const part of (0, utils_1.chunkJoin)(group.map((id) => `<@${id}>`), ", ", room)) {
                 const users = part.match(/\d{17,20}/g) ?? [];
-                const content = (0, messages_1.format)(first ? (kind === "winners" ? m.winners : m.reroll) : m.winnersContinued, { prize: g.prize, s, mentions: part });
+                const content = (0, messages_1.format)(first ? (kind === "winners" ? m.winners : m.reroll) : m.winnersContinued, { prize: shortPrize(g), s, mentions: part });
                 const payload = { content: content.slice(0, MAX_MESSAGE), allowedMentions: { parse: [], users, repliedUser: false } };
                 await (first && msg ? msg.reply(payload) : chan.send(payload)).catch(noop_1.default);
                 first = false;
@@ -730,7 +810,7 @@ class GiveawaysManager {
     async dmWinners(g, winners) {
         const guild = this.client.guilds.cache.get(g.guildID);
         const link = g.messageID ? `https://discord.com/channels/${g.guildID}/${g.channelID}/${g.messageID}` : "";
-        const content = (0, messages_1.format)(this.messages.winnerDM, { prize: g.prize, guild: guild?.name ?? "the server", link }).slice(0, MAX_MESSAGE);
+        const content = (0, messages_1.format)(this.messages.winnerDM, { prize: shortPrize(g), guild: guild?.name ?? "the server", link }).slice(0, MAX_MESSAGE);
         for (const id of winners) {
             const user = await this.client.users.fetch(id).catch(() => null);
             await user?.send({ content, allowedMentions: { parse: [] } }).catch(() => { });

@@ -46,6 +46,8 @@ export declare class GiveawaysManager {
     /** @internal Called by the extension once the database is connected. */
     _onDatabaseReady(): void;
     private emit;
+    /** Whether anything listens to an event, so snapshots are only built when needed. */
+    private wants;
     private getChannel;
     /**
      * Fetches the message of a giveaway.
@@ -134,7 +136,9 @@ export declare class GiveawaysManager {
     join(id: Snowflake, member: GuildMember, source: EntryContext, user: User): Promise<IEntryResult | null>;
     /**
      * Removes an entry. Returns the giveaway, or null if it was not entered/active.
-     * @param force Also remove entries while paused or ended.
+     * @param force Also remove entries while paused. Entries of an ended
+     * giveaway are never changed: they are the record the winners were drawn
+     * from (removing one used to leave a winner who "never entered").
      */
     leave(id: Snowflake, userID: Snowflake, source?: EntryContext, user?: User, force?: boolean): Promise<Giveaway | null>;
     /**

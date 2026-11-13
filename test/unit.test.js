@@ -231,8 +231,7 @@ test("a slow click is acknowledged in time and answered afterwards", async () =>
         options: { useDefault: true, messages: DEFAULT_MESSAGES },
         giveawaysManager: { toggleEntry: () => new Promise((r) => setTimeout(() => r({ action: "added", giveaway: g }), 2300)) },
     }
-    const handler = Object.create(GiveawaysInteractionHandler.prototype)
-    handler.client = { getExtension: () => ext }
+    const handler = new GiveawaysInteractionHandler({ on() {}, getExtension: () => ext })
 
     const desc = Object.getOwnPropertyDescriptor(Database, "ready")
     const realGet = Database.getByMessage
@@ -246,4 +245,29 @@ test("a slow click is acknowledged in time and answered afterwards", async () =>
     }
     assert.deepEqual(calls.map((c) => c[0]), ["defer", "edit"])
     assert.match(calls[1][1], /joined the giveaway for \*\*Nitro\*\*/)
+})
+
+test("emoji matching ignores the variation selector and matches custom emoji forms", () => {
+    const { emojiMatches } = require("../dist")
+    const uni = (name) => ({ name, id: null, toString: () => name })
+    assert.ok(emojiMatches(uni("🎉"), "🎉️"))
+    assert.ok(emojiMatches(uni("🎉️"), "🎉"))
+    assert.ok(!emojiMatches(uni("🎁"), "🎉"))
+    const custom = { name: "party", id: "123456789012345678", toString: () => "<:party:123456789012345678>" }
+    assert.ok(emojiMatches(custom, "123456789012345678"))
+    assert.ok(emojiMatches(custom, "<:party:123456789012345678>"))
+    assert.ok(!emojiMatches(custom, "party"), "a custom emoji's name alone is not unique")
+})
+
+test("win chance estimate", () => {
+    const g = new Giveaway({ prize: "p", duration: DAY, winnersCount: 2 })
+    for (const id of ["a", "b", "c", "d"]) g.addEntry(id)
+    assert.equal(g.winChance("a"), 0.5)
+    assert.equal(g.winChance("zzz"), 0, "not entered")
+    g.winnersCount = 10
+    assert.equal(g.winChance("a"), 1, "more winners than entries")
+    g.winnersCount = 1
+    g.setWeight("a", 7) // 7 of 10 tickets
+    assert.ok(Math.abs(g.winChance("a") - 0.7) < 1e-9)
+    assert.equal(g.url(), null)
 })

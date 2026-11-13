@@ -1,5 +1,6 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import builder from "../../functions/builder"
+import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
     name: "$setGiveawayDescription",
@@ -17,7 +18,7 @@ export default new NativeFunction({
         },
     ],
     execute(ctx, [text]) {
-        const error = text.length > 2000 ? "Description must be at most 2000 characters" : null
+        const error = text.length > GiveawayLimits.description ? `Description must be at most ${GiveawayLimits.description} characters` : null
         if (error) return this.customError(error)
         const b = builder(ctx)
         b.display = { ...b.display, description: text }

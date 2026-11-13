@@ -1,6 +1,7 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import builder from "../../functions/builder"
 import { parseSnowflake } from "../../utils"
+import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
     name: "$addBonusEntries",
@@ -28,7 +29,7 @@ export default new NativeFunction({
     execute(ctx, [role, amount]) {
         const roleID = parseSnowflake(role)
         if (!roleID) return this.customError(`Invalid role ID: ${role}`)
-        if (!Number.isInteger(amount) || amount < 1) return this.customError("Amount must be a whole number of at least 1")
+        if (!Number.isInteger(amount) || amount < 1 || amount > GiveawayLimits.bonus) return this.customError(`Amount must be a whole number from 1 to ${GiveawayLimits.bonus}`)
         const b = builder(ctx)
         b.bonusEntries = [...(b.bonusEntries ?? []).filter((x) => x.roleID !== roleID), { roleID, amount }]
         return this.success()

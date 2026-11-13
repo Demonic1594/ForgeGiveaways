@@ -46,6 +46,8 @@ class ForgeGiveaways extends forgescript_1.ForgeExtension {
         o.buttonLabel ||= "Join";
         o.buttonStyle ??= discord_js_1.ButtonStyle.Success;
         o.showEntryCount ??= true;
+        o.showInfoButton ??= true;
+        o.entryCooldown = Math.max(0, o.entryCooldown ?? 3000);
         o.dmWinners ??= false;
         o.entryFlushDelay = Math.max(0, o.entryFlushDelay ?? 1000);
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000);

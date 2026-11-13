@@ -31,6 +31,8 @@ export enum GiveawayProperty {
     minMemberAge = "minMemberAge",
     bonusEntries = "bonusEntries",
     description = "description",
+    excludeHost = "excludeHost",
+    url = "url",
 }
 
 const join = (arr: readonly string[] | null | undefined, sep?: string | null) => arr?.join(sep ?? ", ")
@@ -65,4 +67,6 @@ export const GiveawayProperties = defineProperties<typeof GiveawayProperty, Give
     minMemberAge: (i) => i?.requirements?.minMemberAge,
     bonusEntries: (i, sep) => i?.bonusEntries?.map((b) => `${b.roleID}:${b.amount}`).join(sep ?? ", "),
     description: (i) => i?.display?.description,
+    excludeHost: (i) => (i ? !!i.requirements?.excludeHost : undefined),
+    url: (i) => i?.url() ?? undefined,
 })

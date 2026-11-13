@@ -1,6 +1,7 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import { BaseChannel, GuildBasedChannel } from "discord.js"
 import { ForgeGiveaways } from "../.."
+import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
     name: "$startGiveaway",
@@ -49,7 +50,8 @@ export default new NativeFunction({
     ],
     output: ArgType.String,
     async execute(ctx, [channel, host, prize, duration, winners]) {
-        if (winners != null && !(Number.isInteger(winners) && winners >= 1)) return this.customError("Winners must be a whole number of at least 1")
+        if (winners != null && !(Number.isInteger(winners) && winners >= 1 && winners <= GiveawayLimits.count)) return this.customError(`Winners must be a whole number from 1 to ${GiveawayLimits.count}`)
+        if (prize.trim().length > GiveawayLimits.prize) return this.customError(`Prize must be at most ${GiveawayLimits.prize} characters`)
         if (!(duration > 0)) return this.customError("Duration must be greater than 0")
         if (!prize.trim()) return this.customError("Prize must not be empty")
 

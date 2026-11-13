@@ -1,5 +1,6 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import { ForgeGiveaways } from "../.."
+import { GiveawayLimits } from "../../structures"
 import { scopedGiveaway } from "../../functions/scope"
 
 export default new NativeFunction({
@@ -45,7 +46,8 @@ export default new NativeFunction({
     ],
     output: ArgType.Boolean,
     async execute(ctx, [id, guild, host, prize, winners]) {
-        if (winners != null && !(Number.isInteger(winners) && winners >= 1)) return this.customError("Winners must be a whole number of at least 1")
+        if (winners != null && !(Number.isInteger(winners) && winners >= 1 && winners <= GiveawayLimits.count)) return this.customError(`Winners must be a whole number from 1 to ${GiveawayLimits.count}`)
+        if (prize && prize.trim().length > GiveawayLimits.prize) return this.customError(`Prize must be at most ${GiveawayLimits.prize} characters`)
         // The guild argument used to only resolve the host; it now also has
         // to match the giveaway, so one guild can't edit another's giveaway.
         if (!(await scopedGiveaway(ctx, id, guild))) return this.success(false)
