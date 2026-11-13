@@ -33,12 +33,12 @@ ReForgeGiveaways is a reworked, hardened and feature-rich giveaway extension for
 
 <h3 align="center">Why ReForgeGiveaways</h3><hr>
 
-- ⏳ **No duration limit.** Run a giveaway for a month, a year or longer. The original ended anything over ~24.8 days right after it started.
-- 🛡️ **Survives downtime.** Restarts, crashes at any point, Discord outages, database hiccups and host sleep are all recovered from.
-- 🚫 **Abuse protection.** Join/leave spam cooldown, requirement and bonus-role re-checks at the draw, no bots, optional host exclusion, no mass pings.
-- 🎲 **Fair draws.** Cryptographically secure, unbiased and tested statistically, with weighted draws for bonus entries.
-- ⚡ **Fast at any size.** 100,000 entrants join, draw and save in well under a second.
-- ✨ **Feature rich.** Pause and resume, extend and shorten, cancel, bonus entries, entry caps, account and member age requirements, replacing a single winner, an info button with win chances, winner DMs, live entry counter, and every text translatable.
+- **No Duration Limits** – Run giveaways for a month, a year, or indefinitely. Unlike the original implementation, which failed with durations exceeding approximately 24.8 days, giveaways now handle long durations correctly.
+- **Reliable Recovery** – Automatically recover from restarts, crashes, Discord outages, database interruptions, and host sleep without losing giveaway state.
+- **Abuse Prevention** – Includes join/leave spam cooldowns, requirement and bonus-role revalidation at draw time, bot exclusion, optional host exclusion, and protection against mass mentions.
+- **Fair &amp; Secure Draws** – Uses a cryptographically secure random number generator to ensure unbiased results, backed by statistical testing. Supports weighted draws for bonus entries.
+- **High Performance** – Handles 100,000 entrants, including entry processing, winner selection, and database persistence, in well under a second.
+- **Extensive Feature Set** – Supports pausing and resuming, extending and shortening durations, cancellation, bonus entries, entry limits, account and server membership age requirements, individual winner replacement, an interactive information button displaying win probabilities, winner notifications via DM, a live entry counter, and full localization of all text.
 
 <details>
 <summary><b>Everything fixed compared to ForgeGiveaways 1.1.0</b></summary>
