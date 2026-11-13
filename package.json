@@ -1,6 +1,6 @@
 {
   "name": "@tryforge/reforge.giveaways",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "ReForgeGiveaways: a reworked giveaway extension for ForgeScript with no duration limit, crash and downtime recovery, abuse protection, pause/resume, bonus entries, requirements and customizable messages. Fork of tryforge/ForgeGiveaways.",
   "main": "dist/index.js",
   "scripts": {

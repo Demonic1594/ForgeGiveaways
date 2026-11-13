@@ -71,7 +71,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.1.0`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags), starting with `v2.1.0`.
+    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.2.0`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
 
 2. Here's an example of how your main file should look:
     ```js
@@ -404,8 +404,18 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 Install the new release over the old one; there is nothing to migrate by hand. On the first start the database is upgraded in place, and only nullable columns are ever added, so your giveaways and entries are kept.
 
 ```bash
-npm i github:Demonic1594/ReForgeGiveaways#v2.1.0
+npm i github:Demonic1594/ReForgeGiveaways#v2.2.0
 ```
+
+#### From 2.1.0 to 2.2.0
+No database changes. What behaves differently:
+
+- **`$startGiveaway`** refuses a channel of another server than the one the command runs in.
+- **`$wipeGiveaways`** without a guild argument wipes only the current server. Wiping every server works only outside any server (e.g. in `ready`).
+- **Role arguments** accept only role IDs and role mentions; user and channel mentions are refused.
+- **`$setGiveawayImage` / `$setGiveawayThumbnail`** accept only http(s) links up to 2048 characters.
+- **Reaction mode:** `entryCooldown` now applies to reaction joins, so a member who just left waits for it (3 s by default) before rejoining.
+- **Invalid `colors`** stop the bot at start-up with a clear error instead of failing on every giveaway.
 
 #### From 2.0.0 to 2.1.0
 Your commands keep working. Three things behave differently:
