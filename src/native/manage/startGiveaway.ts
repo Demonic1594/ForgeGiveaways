@@ -1,11 +1,12 @@
 import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import { BaseChannel, GuildBasedChannel } from "discord.js"
-import { ForgeGiveaways } from "../.."
+import { ReForgeGiveaways } from "../.."
+import { GiveawayLimits } from "../../structures"
 
 export default new NativeFunction({
     name: "$startGiveaway",
     version: "1.0.0",
-    description: "Starts a new giveaway on a guild, returns giveaway id",
+    description: "Starts a new giveaway on a guild, returns giveaway id. There is no maximum duration",
     unwrap: true,
     brackets: true,
     args: [
@@ -35,21 +36,27 @@ export default new NativeFunction({
         },
         {
             name: "duration",
-            description: "The duration for this giveaway",
+            description: "The duration for this giveaway, e.g. 30d or 1y",
             rest: false,
             required: true,
             type: ArgType.Time
         },
         {
             name: "winners",
-            description: "How many winners this giveaway will have",
+            description: "How many winners this giveaway will have, defaults to 1",
             rest: false,
             type: ArgType.Number
         }
     ],
     output: ArgType.String,
     async execute(ctx, [channel, host, prize, duration, winners]) {
-        const client = ctx.client.getExtension(ForgeGiveaways, true)
+        if (winners != null && !(Number.isInteger(winners) && winners >= 1 && winners <= GiveawayLimits.count)) return this.customError(`Winners must be a whole number from 1 to ${GiveawayLimits.count}`)
+        if (prize.trim().length > GiveawayLimits.prize) return this.customError(`Prize must be at most ${GiveawayLimits.prize} characters`)
+        if (!(duration > 0)) return this.customError("Duration must be greater than 0")
+        if (!prize.trim()) return this.customError("Prize must not be empty")
+
+        const client = ctx.client.getExtension(ReForgeGiveaways, true)
+        const b = ctx.giveawayBuilder
 
         const giveaway = await client.giveawaysManager.start({
             guildID: (channel as GuildBasedChannel).guildId,
@@ -57,8 +64,11 @@ export default new NativeFunction({
             hostID: host.id,
             duration,
             prize,
-            winnersCount: winners || 1,
-            requirements: ctx.requirements
+            winnersCount: winners ?? 1,
+            requirements: ctx.requirements,
+            bonusEntries: b?.bonusEntries,
+            maxEntries: b?.maxEntries,
+            display: b?.display,
         }).catch(ctx.noop)
 
         return this.success(giveaway?.id)

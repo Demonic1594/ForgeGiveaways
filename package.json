@@ -1,29 +1,61 @@
 {
-  "name": "@tryforge/forge.giveaways",
-  "version": "1.1.0",
-  "description": "ForgeGiveaways is a lightweight, flexible, and reliable extension for managing giveaways. Fully customizable features let you automate, track, and control every giveaway seamlessly.",
+  "name": "@tryforge/reforge.giveaways",
+  "version": "2.0.0",
+  "description": "ReForgeGiveaways: a reworked giveaway extension for ForgeScript with no duration limit, crash and downtime recovery, abuse protection, pause/resume, bonus entries, requirements and customizable messages. Fork of tryforge/ForgeGiveaways.",
   "main": "dist/index.js",
   "scripts": {
-    "docgen": "tsc && typedoc src/index.ts && node dist/docgen",
-    "commit": "npm run docgen && node dist/commit",
-    "test": "tsc && node dist/__tests__/"
+    "build": "tsc",
+    "test": "tsc && node --test test/*.test.js",
+    "docgen": "tsc && node dist/docgen",
+    "docs": "tsc && typedoc src/index.ts",
+    "commit": "npm run docgen && node dist/commit"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tryforge/ForgeGiveaways.git"
+    "url": "git+https://github.com/Demonic1594/ReForgeGiveaways.git"
   },
-  "keywords": [],
-  "author": "itsnicky.",
+  "keywords": [
+    "discord",
+    "extension",
+    "forge",
+    "forgescript",
+    "giveaway",
+    "giveaways",
+    "reforge",
+    "reforgegiveaways"
+  ],
+  "author": "itsnicky. (original), Demonic1594 (fork)",
   "license": "GPL-3.0",
   "devDependencies": {
     "@tryforge/forge.db": "^2.1.1",
-    "@tryforge/forgescript": "^2.5.0",
-    "discord.js": "^14.25.0",
+    "@tryforge/forgescript": "^2.7.1",
+    "@types/node": "^22.20.5",
+    "better-sqlite3": "^12.11.1",
+    "discord.js": "^14.27.0",
     "typedoc": "^0.26.11",
     "typescript": "^5.6.3"
   },
   "dependencies": {
     "tiny-typed-emitter": "^2.1.0",
-    "typeorm": "^0.3.27"
-  }
+    "typeorm": "^0.3.31"
+  },
+  "peerDependencies": {
+    "@tryforge/forgescript": ">=2.5.0",
+    "@tryforge/forge.db": "^2.1.0",
+    "discord.js": "^14.25.0"
+  },
+  "files": [
+    "dist",
+    "metadata",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "bugs": {
+    "url": "https://github.com/Demonic1594/ReForgeGiveaways/issues"
+  },
+  "homepage": "https://github.com/Demonic1594/ReForgeGiveaways#readme"
 }

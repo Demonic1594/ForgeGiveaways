@@ -1,0 +1,83 @@
+# Changelog
+
+## 2.0.0 (ReForgeGiveaways, November 2026)
+
+Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) 1.1.0 (commit `586fb15`). The fork is a modified version of that program, under the same GPL-3.0 license.
+
+### Fixed
+- **Durations over ~24.8 days ended immediately.** Node turns any `setTimeout` delay above 2^31 - 1 ms into 1 ms. Replaced the per-giveaway timeouts with one scheduler that re-arms in safe steps; there is no maximum duration now.
+- Times were stored as 32-bit `INTEGER` on Postgres and MySQL, which overflows for millisecond timestamps. Now `BIGINT`.
+- MySQL stored entries in `TEXT` (64 KB, roughly 3,400 entries). Now `LONGTEXT`.
+- Winners were only picked from members in the bot's cache, so without the `GuildMembers` intent giveaways often had no winners.
+- Concurrent clicks could overwrite each other's entries; a timer racing `$endGiveaway` could announce winners twice.
+- A giveaway whose message was deleted never ended and was retried on every restart.
+- `oldGiveaway` in events lost all methods (`structuredClone` of a class instance).
+- The reaction handler fired `giveawayEntryRemove` when it removed the reaction of somebody who never entered.
+- Reroll ignored requirements, refused giveaways that ended without winners, and a unique reroll silently fell back to previous winners.
+- Biased shuffle (`sort(() => Math.random() - 0.5)`) replaced by Fisher-Yates with `crypto.randomInt`.
+- A prize containing `@everyone` pinged everyone.
+- Clicks on ended or unknown giveaways showed "This interaction failed".
+- Timers were not restored if the database connected after the bot became ready.
+- `$getAllGiveaways`, `$newGiveaway` and `$oldGiveaway` required a property although they can return JSON.
+- Requirement checks now report the real reason before "entries full".
+
+### Downtime and crash recovery
+- Ended-while-offline giveaways are drawn on restart one at a time; the result shows the scheduled end time.
+- Results are written with an "announcement pending" marker and announced (and `giveawayEnd` fired) on the next start if the bot died in between, exactly once.
+- A new giveaway is saved before its message is posted; a missing message is posted on restart.
+- Reaction mode re-counts reactions on restart and before each draw.
+- Stale giveaway messages are refreshed on restart.
+- Deadlines during a guild outage or while disconnected are retried every minute (up to a day) instead of ending with no winners; a removed bot ends them right away.
+- A failed database write while ending leaves memory and database consistent and re-arms the timer; life cycle changes are copy-on-write.
+- The scheduler re-checks the wall clock every 30 s (host sleep, clock jumps).
+- Database connection is retried with backoff at boot; calls time out after 30 s instead of hanging.
+- Slow clicks are deferred within Discord's 3 s limit.
+
+### Abuse resistance (found by adversarial testing)
+- **Quadratic join cost:** every join rebuilt the entry index, so 20,000 joins took ~11 s of blocked event loop (a mass-join raid could freeze the bot). Joins are O(1) now; 1,000,000 joins take ~0.3 s.
+- **Ended giveaway brought back to life:** an entry write queued before an end and run after it could overwrite the ended state with "running". Background writes now always save the current state; a test reproduces the exact interleaving and fails on the old code.
+- **Winner who never entered:** `$removeGiveawayEntry` on an ended giveaway removed a winner's entry. Entries of ended giveaways are now read-only (found by the fuzzer).
+- **Bonus role held only while joining:** the joined-with ticket count was used for uncached members. The draw now re-checks picked members' live roles and redraws with corrected counts (cheater's odds verified to drop from ~99% to a fair 50%).
+- Failed background entry writes are retried instead of being lost until the next change.
+- Bots can never enter or win; the host can be excluded.
+- Per-member join/leave cooldown.
+- Caps on prize length, winners, entry cap and bonus amounts; long prizes are shortened inside chat messages so winner mentions always fit.
+- Event snapshots are built only when something listens, and cloning is ~10x faster (13 ms instead of 132 ms at 1,000,000 entries).
+- Reaction emoji match with or without the U+FE0F variation selector.
+
+### Security
+- Management functions (`$editGiveaway`, `$endGiveaway`, `$rerollGiveaway`, `$cancelGiveaway`, `$pauseGiveaway`, `$resumeGiveaway`, `$extendGiveaway`, `$shortenGiveaway`, `$addGiveawayEntry`, `$removeGiveawayEntry`, `$deleteGiveaway`) only act on giveaways of the given guild, or the current guild when none is given. `$editGiveaway`'s existing guild argument must now match.
+- Validation for winners, duration, prize and role IDs.
+- Default messages use explicit `allowedMentions`.
+
+### Performance
+- Active giveaways cached in memory; no database read per click.
+- Entry writes coalesced (`entryFlushDelay`, default 1 s).
+- Live entry counter refresh is debounced (`messageUpdateDelay`, default 5 s).
+- Winner draw fetches only as many members as needed.
+- Indexes on `messageID` and `(guildID, hasEnded)`.
+
+### Added
+- `$pauseGiveaway`, `$resumeGiveaway`, `$extendGiveaway`, `$shortenGiveaway`, `$cancelGiveaway`
+- `$addGiveawayEntry`, `$removeGiveawayEntry`, `$getGuildGiveaways`
+- Requirements: `$setRequiredRolesMode`, `$setMinimumAccountAge`, `$setMinimumMemberAge`, `$setMaxEntries`
+- Bonus entries: `$addBonusEntries` (weighted draw)
+- Display: `$setGiveawayDescription`, `$setGiveawayColor`, `$setGiveawayImage`, `$setGiveawayThumbnail`, `$setGiveawayPingRole`
+- Info button (`showInfoButton`): private status, tickets, win chance and deny reason for the clicker
+- `$excludeGiveawayHost`, `$giveawayWinChance`, `$giveawayIsWinner`, `$giveawayURL`; deny reasons `bot` and `host`; options `showInfoButton`, `entryCooldown`
+- Getters: `$giveawayEndTimestamp`, `$giveawayTimeLeft`, `$giveawayIsPaused`, `$giveawayIsCancelled`, `$giveawayEndedAt`, `$giveawayEntriesCount`, `$giveawayTotalTickets`, `$giveawayMaxEntries`, `$giveawayDescription`, `$giveawayMinAccountAge`, `$giveawayMinMemberAge`, `$giveawayRequiredRolesMode`, `$giveawayBonusEntries`, `$giveawayHasEntered`, `$giveawayEntryWeight`, `$giveawayDenyReason`, plus matching properties for `$getGiveaway`
+- `$wipeGiveaways[guild]` wipes one guild only
+- Events: `giveawayCancel`, `giveawayPause`, `giveawayResume`; `giveawayEntryRevoke` carries the reason
+- Options: `emoji`, `buttonLabel`, `buttonStyle`, `showEntryCount`, `dmWinners`, `colors`, `messages`, `entryFlushDelay`, `messageUpdateDelay`, `deleteEndedAfter`, `handleSignals`
+- A deadline reached while the bot is disconnected is retried a minute later instead of ending with no winners
+- Test suite (`npm test`): scheduler, locking, draw fairness, requirements, and end-to-end runs on SQLite including a restart
+
+### Changed
+- Renamed to **ReForgeGiveaways**: package `@tryforge/reforge.giveaways`, class `ReForgeGiveaways` (`ForgeGiveaways` is no longer exported), extension name `reforge.giveaways`, options type `IReForgeGiveawaysOptions`, log prefix `[ReForgeGiveaways]`.
+- Persistence uses TypeORM `EntitySchema` per driver instead of decorators; table names and stored formats are unchanged, so existing databases upgrade in place.
+- `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies.
+- The generated typedoc HTML (`docs/`) is no longer committed; run `npm run docs`.
+
+## 1.1.0 and earlier
+
+See [metadata/changelogs.json](metadata/changelogs.json) and the upstream repository.
