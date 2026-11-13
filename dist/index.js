@@ -26,7 +26,19 @@ const tiny_typed_emitter_1 = require("tiny-typed-emitter");
 const structures_1 = require("./structures");
 const error_1 = require("./functions/error");
 const noop_1 = __importDefault(require("./functions/noop"));
+const utils_1 = require("./utils");
 const package_json_1 = require("../package.json");
+/** Longest the shutdown handler waits for pending writes before letting the process stop. */
+const SHUTDOWN_TIMEOUT = 5000;
+/** The shards this process runs, if the bot is split over several processes. */
+function ownedShards(client) {
+    if (client.shard)
+        return { ids: client.shard.ids, count: client.shard.count };
+    const { shards, shardCount } = client.options;
+    if (Array.isArray(shards) && typeof shardCount === "number" && shards.length < shardCount)
+        return { ids: shards, count: shardCount };
+    return null;
+}
 class ReForgeGiveaways extends forgescript_1.ForgeExtension {
     options;
     name = "reforge.giveaways";
@@ -53,7 +65,9 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000);
         o.handleSignals ??= true;
         o.colors = { active: "Green", paused: "Yellow", ended: "Red", cancelled: "Grey", ...o.colors };
-        o.messages = { ...structures_1.DEFAULT_MESSAGES, ...o.messages };
+        // Only real texts override a default: `{ joined: undefined }` must not blank it.
+        const texts = Object.entries(o.messages ?? {}).filter(([key, text]) => key in structures_1.DEFAULT_MESSAGES && typeof text === "string");
+        o.messages = { ...structures_1.DEFAULT_MESSAGES, ...Object.fromEntries(texts) };
     }
     async init(client) {
         this.commands = new managers_1.GiveawaysCommandManager(client);
@@ -73,6 +87,12 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         if (!this.options.useDefault && !this.options.events?.includes("giveawayStart")) {
             throw new Error(error_1.GiveawaysErrorType.MissingStartEvent);
         }
+        // With several processes (sharding), each one only looks after the
+        // giveaways of its own guilds; otherwise every process would draw
+        // and announce every giveaway.
+        const shards = ownedShards(client);
+        if (shards)
+            structures_1.Database.owns = (guildID) => shards.ids.includes((0, utils_1.shardIdFor)(guildID, shards.count));
         // The manager exists right away; its methods wait for the database.
         this.giveawaysManager = new managers_1.GiveawaysManager(client, this);
         if (this.options.handleSignals)
@@ -103,7 +123,9 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
     #handleSignals() {
         for (const signal of ["SIGINT", "SIGTERM"]) {
             process.once(signal, () => {
-                this.giveawaysManager.destroy().catch(noop_1.default).finally(() => {
+                // Don't let a hanging database keep the process from stopping.
+                const limit = new Promise((r) => setTimeout(r, SHUTDOWN_TIMEOUT));
+                Promise.race([this.giveawaysManager.destroy().catch(noop_1.default), limit]).finally(() => {
                     // Re-raise with the default handler unless someone else handles it.
                     if (process.listenerCount(signal) === 0)
                         process.kill(process.pid, signal);

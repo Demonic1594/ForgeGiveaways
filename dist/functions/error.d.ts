@@ -5,7 +5,8 @@ export declare enum GiveawaysErrorType {
     MissingStartEvent = "The giveawayStart event must be defined to start giveaways, but none was detected",
     MultipleStartEvents = "Detected multiple giveawayStart events, only one is allowed per client instance",
     GiveawayNotActive = "Giveaway with ID \"$1\" has already ended and can no longer be entered",
-    WrongGuild = "Giveaway with ID \"$1\" belongs to another guild, refusing to modify it"
+    WrongGuild = "Giveaway with ID \"$1\" belongs to another guild, refusing to modify it",
+    NoGuildScope = "Refusing to modify giveaway with ID \"$1\" from a direct message, pass the guild ID argument to allow it"
 }
 /**
  * Logs a giveaways error in the console.

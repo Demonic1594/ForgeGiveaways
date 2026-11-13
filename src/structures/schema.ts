@@ -31,6 +31,12 @@ const json: ValueTransformer = {
     },
 }
 
+/*
+ * Never change the type or length of an existing column. ForgeDB runs TypeORM
+ * with `synchronize: true`, and on Postgres and MySQL TypeORM "changes" a
+ * column by dropping and re-adding it, which loses the data in it (or fails
+ * to start when the table has rows). Adding new nullable columns is safe.
+ */
 function columns(driver: DriverKind) {
     const mongo = driver === "mongodb"
     // MySQL TEXT caps out at 64 KB (about 3,400 entries); LONGTEXT does not.
@@ -65,6 +71,7 @@ function columns(driver: DriverKind) {
         messageID: snowflake(true),
         entries: list(),
         entryWeights: obj(),
+        manualEntries: list(true),
         winners: list(),
         previousWinners: list(true),
         requirements: obj(),

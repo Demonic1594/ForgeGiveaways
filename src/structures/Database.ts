@@ -92,9 +92,16 @@ export class Database extends GiveawaysDatabaseManager {
         return new this.entities.Giveaway(options)
     }
 
+    /**
+     * Whether this process is responsible for a guild's giveaways. Always true
+     * unless the bot is split over several processes (sharding), where each
+     * process only times, draws and caches the giveaways of its own guilds.
+     */
+    public static owns: (guildID: Snowflake) => boolean = () => true
+
     private static track(g: Giveaway) {
         for (const [msg, id] of this.byMessage) if (id === g.id && msg !== g.messageID) this.byMessage.delete(msg)
-        if (g.hasEnded) {
+        if (g.hasEnded || !this.owns(g.guildID)) {
             this.active.delete(g.id)
             if (g.messageID) this.byMessage.delete(g.messageID)
             return
@@ -113,7 +120,7 @@ export class Database extends GiveawaysDatabaseManager {
     public static async loadActive() {
         this.active.clear()
         this.byMessage.clear()
-        const rows = await this.repo().find({ where: { hasEnded: false } as any })
+        const rows = (await this.repo().find({ where: { hasEnded: false } as any })).filter((g) => this.owns(g.guildID))
         for (const g of rows) this.track(g)
         return rows
     }
@@ -121,6 +128,24 @@ export class Database extends GiveawaysDatabaseManager {
     /** Active giveaways currently held in memory. */
     public static activeGiveaways() {
         return [...this.active.values()]
+    }
+
+    /** Whether a giveaway is active and held in memory. */
+    public static isActive(id: Snowflake) {
+        return this.active.has(id)
+    }
+
+    /** The in-memory copy of an active giveaway, without touching the database. */
+    public static peek(id: Snowflake) {
+        return this.active.get(id) ?? null
+    }
+
+    /**
+     * Swaps database rows of active giveaways for their in-memory copies,
+     * which also hold entry changes that are still waiting to be written.
+     */
+    public static live<T extends Giveaway>(rows: T[]) {
+        return rows.map((row) => (this.active.get(row.id) as T | undefined) ?? row)
     }
 
     /**
@@ -148,7 +173,21 @@ export class Database extends GiveawaysDatabaseManager {
     public static async findPendingAnnouncements() {
         const kinds = ["end", "reroll"]
         const where = this.driver === "mongodb" ? { announcePending: { $in: kinds } } : { announcePending: In(kinds) }
-        return await this.repo().find({ where: where as any })
+        return (await this.repo().find({ where: where as any })).filter((g) => this.owns(g.guildID))
+    }
+
+    /**
+     * Ids of giveaways that ended before `cutoff` and are done being announced.
+     * Only the columns needed to decide are loaded, not the entry lists.
+     */
+    public static async findEndedBefore(cutoff: number) {
+        const rows = await this.repo().find({
+            where: { hasEnded: true } as any,
+            select: ["id", "timestamp", "duration", "endedAt", "announcePending"] as any,
+        })
+        return rows
+            .filter((g) => !g.announcePending && (g.endedAt ?? Number(g.timestamp) + Number(g.duration)) < cutoff)
+            .map((g) => g.id)
     }
 
     /** Gets all existing giveaways. */

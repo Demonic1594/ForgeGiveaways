@@ -66,3 +66,11 @@ export function formatDuration(ms: number) {
     }
     return parts.join(" ") || "0s"
 }
+
+/**
+ * The shard a guild belongs to, by Discord's formula `(guild_id >> 22) % shard_count`.
+ */
+export function shardIdFor(guildID: string, shardCount: number) {
+    if (!SNOWFLAKE.test(guildID)) return 0
+    return Number((BigInt(guildID) >> 22n) % BigInt(Math.max(1, Math.floor(shardCount))))
+}

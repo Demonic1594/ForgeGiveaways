@@ -14,6 +14,14 @@ const { ReForgeGiveaways } = require("../..")
 const DAY = 864e5
 const snow = (agoMs = 2 * 365 * DAY) => SnowflakeUtil.generate({ timestamp: Date.now() - agoMs }).toString()
 
+/*
+ * SQLite in `dir` by default. To run the single-process test files against
+ * another database, put its ForgeDB options in GIVEAWAYS_TEST_DB, e.g.
+ * GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
+ * (use an empty database; the driver, e.g. `pg`, must be installed).
+ */
+const database = (dir) => (process.env.GIVEAWAYS_TEST_DB ? JSON.parse(process.env.GIVEAWAYS_TEST_DB) : { type: "better-sqlite3", folder: dir })
+
 async function boot(dir, options = {}) {
     const { autoMembers, ...extOptions } = options
     const giveaways = new ReForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...extOptions })
@@ -23,7 +31,7 @@ async function boot(dir, options = {}) {
     giveaways.emitter.emit = (name, ...args) => { emitted.push({ name, args }); return realEmit(name, ...args) }
     const client = new ForgeClient({
         intents: ["Guilds"],
-        extensions: [giveaways, new ForgeDB({ type: "better-sqlite3", folder: dir })],
+        extensions: [giveaways, new ForgeDB(database(dir))],
     })
     const manager = giveaways.giveawaysManager
     // Never logs in; pretend to be connected so deadlines are not postponed.
@@ -31,6 +39,7 @@ async function boot(dir, options = {}) {
     await manager.whenReady()
 
     const sent = []
+    const deleted = []
     let nextMsg = 0
     const messages = new Map()
     const makeMessage = (payload) => {
@@ -42,6 +51,7 @@ async function boot(dir, options = {}) {
             edit: async (p) => { msg.payloads.push(p); return msg },
             reply: async (p) => { sent.push({ replyTo: id, ...p }); return makeMessage(p) },
             react: async () => {},
+            delete: async () => { messages.delete(id); deleted.push(id) },
             reactions: { cache: [] },
         }
         messages.set(id, msg)
@@ -62,7 +72,8 @@ async function boot(dir, options = {}) {
             fetch: async (arg) => {
                 if (typeof arg === "string") {
                     const m = members.get(arg) ?? (autoMembers ? addMember(arg) : undefined)
-                    if (!m) throw new Error("Unknown Member")
+                    // What Discord answers for somebody who is not in the guild.
+                    if (!m) throw Object.assign(new Error("Unknown Member"), { code: 10007 })
                     return m
                 }
                 const out = new Map()
@@ -87,7 +98,7 @@ async function boot(dir, options = {}) {
     manager.getGuild = async () => guild
     manager.fetchMessage = async (_c, id) => messages.get(id)
 
-    return { emitted, client, giveaways, manager, sent, messages, addMember, members, guild, channel, dir, setGuildState: (v) => { guildState = v } }
+    return { emitted, client, giveaways, manager, sent, deleted, messages, addMember, members, guild, channel, dir, setGuildState: (v) => { guildState = v } }
 }
 
 module.exports = { boot, snow, DAY, dbFile: (dir) => path.join(dir, "giveaways.db") }

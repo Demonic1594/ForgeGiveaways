@@ -97,10 +97,14 @@ export declare class GiveawaysManager {
      */
     _onDeadline(id: Snowflake): Promise<Giveaway | null>;
     /**
-     * Ends an existing giveaway and draws the winners.
+     * Ends an existing giveaway and draws the winners. If Discord can't be
+     * reached to check the entrants, this throws and the giveaway keeps
+     * running, rather than ending without winners.
      * @param id The id of the giveaway to end.
      */
     end(id: Snowflake): Promise<Giveaway | null>;
+    /** @internal @param lenient End even if members can't be fetched (they are skipped). */
+    _end(id: Snowflake, lenient: boolean): Promise<Giveaway | null>;
     /**
      * Cancels a running giveaway: it ends without winners.
      */
@@ -112,6 +116,14 @@ export declare class GiveawaysManager {
      * @param amount The amount of new winners (defaults to the winners count).
      */
     reroll(id: Snowflake, unique?: boolean, amount?: number): Promise<Giveaway | null>;
+    /**
+     * Replaces one current winner with a newly drawn one, for example when a
+     * prize was never claimed. The other winners keep their win, and nobody
+     * who won before is drawn.
+     * @param id The id of the giveaway.
+     * @param userID The winner to replace.
+     */
+    rerollWinner(id: Snowflake, userID: Snowflake): Promise<Giveaway | null>;
     /**
      * Edits a running giveaway.
      * @param id The id of the giveaway to edit.
@@ -152,8 +164,15 @@ export declare class GiveawaysManager {
      * checked one by one, so only as many members are fetched as needed instead
      * of every entrant, and people who left the server or no longer meet the
      * requirements are skipped.
+     *
+     * Throws if members can't be looked up (unless `lenient`): a network
+     * error must not be mistaken for "everybody left the server".
      */
     private drawWinners;
+    /**
+     * Fetches members by id; ids missing from the result are not in the guild.
+     * @param lenient Treat failed requests as "not in the guild" instead of throwing.
+     */
     private fetchMembers;
     private announce;
     private dmWinners;

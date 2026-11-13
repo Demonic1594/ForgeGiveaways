@@ -78,6 +78,7 @@ for (const seed of SEEDS) test(`fuzz (seed ${seed}): 1,500 random concurrent ope
         (id) => m.extend(id, Math.floor((random() - 0.3) * 2 * DAY)),
         (id) => m.end(id),
         (id) => m.reroll(id, random() < 0.5, 1 + Math.floor(random() * 3)),
+        (id) => m.rerollWinner(id, pick(members).id),
         (id) => m.edit(id, { winnersCount: 1 + Math.floor(random() * 4), prize: "P" + Math.floor(random() * 100) }),
         (id) => m.addEntry(id, pick(members).id, random() < 0.5),
         (id) => m.leave(id, pick(members).id, undefined, undefined, random() < 0.5),

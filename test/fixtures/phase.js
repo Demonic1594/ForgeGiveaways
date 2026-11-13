@@ -75,12 +75,46 @@ const phases = {
         return { messageID: g.messageID ?? null, posted: h.sent.filter((m) => m.embeds?.length).length }
     },
 
+    // ----- custom messages: the bot died before the start event sent its message
+    async customCrashMidStart(h) {
+        const g = Database.create(base(h, { duration: DAY }))
+        await Database.set(g) // ...and the process dies here
+        return { id: g.id }
+    },
+    async customRestart(h) {
+        h.giveaways.commands.add({ type: "giveawayStart", code: "$return[" + (await h.channel.send({ content: "custom" })).id + "]" })
+        await h.manager._restore()
+        await h.manager._whenRepaired()
+        const ok = await waitFor(async () => (await Database.get(arg))?.messageID)
+        return { attached: !!ok, startEvents: h.emitted.filter((e) => e.name === "giveawayStart").length }
+    },
+
+    // ----- a database created by the original ForgeGiveaways 1.1.0
+    async upgraded(h) {
+        await h.manager._restore()
+        const all = (await Database.getAll()).sort((a, b) => a.timestamp - b.timestamp)
+        const [running] = all
+        const m = h.addMember(snow(), ["400000000000000002"])
+        const joined = await h.manager.toggleEntry(running.id, m, {}, m.user)
+        await h.manager.flushAll()
+        return {
+            giveaways: all.map((g) => ({ id: g.id, prize: g.prize, duration: g.duration, hasEnded: g.hasEnded, cancelled: g.cancelled, entries: g.entries, winners: g.winners, requirements: g.requirements, messageID: g.messageID ?? null })),
+            scheduledAt: h.manager.scheduler.get(running.id) ?? null,
+            joined: joined.action,
+            entriesAfter: (await Database.find({ id: running.id }))[0].entries.length,
+        }
+    },
+
     // ----- reaction mode: reactions changed while the bot was offline
     async reactions(h) {
         const g = await h.manager.start(base(h, { duration: DAY, winnersCount: 5 }))
-        const [left, stayed, joinedOffline, botUser] = [snow(), snow(), snow(), snow()]
-        await h.manager.addEntry(g.id, left, true)
-        await h.manager.addEntry(g.id, stayed, true)
+        const [left, stayed, joinedOffline, botUser, byHand] = [snow(), snow(), snow(), snow(), snow()]
+        for (const id of [left, stayed]) {
+            const m = h.addMember(id)
+            await h.manager.join(g.id, m, {}, m.user)
+        }
+        // Entered with $addGiveawayEntry: no reaction, but still a real entry.
+        await h.manager.addEntry(g.id, byHand, true)
 
         const removed = []
         const users = [stayed, joinedOffline, botUser]
@@ -97,13 +131,13 @@ const phases = {
         }
         h.messages.get(g.messageID).reactions.cache = [reaction]
         const ended = await h.manager.end(g.id)
-        return { winners: ended.winners.sort(), expected: [stayed, joinedOffline].sort(), entries: ended.entries.sort(), left }
+        return { winners: ended.winners.sort(), expected: [stayed, joinedOffline, byHand].sort(), entries: ended.entries.sort(), left }
     },
 }
 
 ;(async () => {
-    const reactionsMode = phase === "reactions"
-    const h = await boot(dir, { autoMembers: true, ...(reactionsMode ? { useReactions: true } : {}) })
+    const extra = phase === "reactions" ? { useReactions: true } : phase.startsWith("custom") ? { useDefault: false, events: ["giveawayStart"] } : {}
+    const h = await boot(dir, { autoMembers: true, ...extra })
     out(await phases[phase](h))
     await h.manager.destroy()
     process.exit(0)

@@ -1,5 +1,46 @@
 # Changelog
 
+## 2.1.0 (November 2026)
+
+A full review of 2.0.0 against the original. The fixes below have tests that fail on 2.0.0, except the shutdown timeout and the commit script.
+
+### Fixed
+- **A giveaway could lose its timer.** Pausing cancelled the end timer before saving; if that write failed, the giveaway kept running but nothing would ever end it until the next restart. Pause, cancel and end now only touch timers after the write succeeded.
+- **Retry storm while the database is down.** An overdue giveaway whose end could not be saved was retried immediately, over and over (more than 1,000 failing draws and error logs per second). It is now retried once a minute.
+- **"No winners" after a network error.** If members could not be fetched during the draw, every entrant looked like they had left the server and the giveaway ended without winners. A failed lookup now fails the draw, which is retried; only a real "not a member" answer skips someone. A day past the deadline the giveaway still ends with whoever can be reached.
+- **Entries lost after a failed write.** `$addGiveawayEntry`, `$removeGiveawayEntry` and failed pause/cancel/edit writes dropped the pending entry write without retrying it. A failed write is now always retried in the background.
+- **Requirements leaking into a started giveaway.** `$startGiveaway` stored the same object the builder functions keep writing to, so `$addRequiredRoles` used later in the same command silently changed the giveaway that had already started. Options are copied now.
+- **Crash on a misconfigured start event.** With `useDefault: false` and no (or more than one) `giveawayStart` command, the event listener threw an unhandled rejection, which ends the Node process. Event listeners can no longer crash the bot.
+- **`$startGiveaway` reported success for a giveaway that was discarded.** With custom messages it returned the ID before the start event had run. It now waits and returns nothing when no message could be attached.
+- **Clicks without an answer in custom mode.** With `useDefault: false`, a click that no event answered (ended, paused, unknown, cooldown, or an entry event you don't listen to) showed "This interaction failed". Those clicks now get the built-in reply; ended and paused clicks reach `giveawayEntryRevoke` with the reason.
+- **Manual entries vanished in reaction mode.** Entries added with `$addGiveawayEntry` have no reaction, so the reaction sync removed them before the draw.
+- **Orphaned giveaway message.** If saving the message ID failed right after posting, the message stayed and a second one was posted on restart. The message is taken back.
+- A crash before a custom `giveawayStart` event sent its message left a giveaway nobody could enter; the event now runs again on restart.
+- The result card cut the winner list in the middle of a mention when there were many winners; it now ends on a whole mention with "and N more".
+- The cooldown list was scanned on every click once it held 10,000 members, which made a mass join slow (8 s for 40,000 clicks, now 0.7 s).
+- Cleaning up old giveaways (`deleteEndedAfter`) loaded every ended giveaway with all its entries each time, could run every few milliseconds for small values, and could delete a result that still had to be announced.
+- `messages: { joined: undefined }` blanked the text instead of keeping the default.
+- The shutdown handler could keep the process from stopping if the database hung; it gives up after 5 s.
+
+### Security
+- **Guild scoping could be bypassed from direct messages.** A context without a guild was treated as unrestricted, which was meant for giveaway events but also covered DMs: a command usable in DMs could end, edit or delete any server's giveaway by ID. Management functions now refuse to act from a DM unless the guild argument is given.
+- `npm run commit` passed the commit message through a shell; a message with quotes or `$(...)` could run commands. It now calls git directly.
+
+### Added
+- `$rerollGiveawayWinner[id;user;guild?]` (alias `$replaceGiveawayWinner`): replace one winner and keep the others.
+- `$clearGiveawayRequirements` and `$clearBonusEntries`, so `$editGiveaway` can remove requirements and bonuses, not only add them.
+- Every text of the giveaway embed is in `messages` (`embedPrize`, `embedWinnersCount`, `fieldEnds`, ...), so the default messages can be fully translated.
+- Properties `pausedAt`, `color`, `image`, `thumbnail`, `pingRoleID` for `$getGiveaway`, `$newGiveaway` and `$oldGiveaway`; `url` in the JSON output.
+- Sharding support: with several processes, each one only handles the giveaways of its own guilds.
+- `$getGuildGiveaways` and `$getAllGiveaways` include entries that are still waiting to be written.
+- Validation: a giveaway must end before the year 10000; negative age requirements and unknown role modes are rejected.
+- Tested against PostgreSQL 16 (previously SQLite only), including an upgrade of a 2.0.0 database; a test upgrades a real ForgeGiveaways 1.1.0 SQLite database.
+- CI workflow that builds, tests and checks that the committed `dist/` and `metadata/` are up to date.
+
+### Notes
+- A new nullable column `manualEntries` is added on first start. No existing column changes.
+- `manager.end()` now rejects when members can't be looked up instead of resolving with no winners; `$endGiveaway` returns `false` in that case.
+
 ## 2.0.0 (ReForgeGiveaways, November 2026)
 
 Forked from [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) 1.1.0 (commit `586fb15`). The fork is a modified version of that program, under the same GPL-3.0 license.

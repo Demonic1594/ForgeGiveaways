@@ -33,7 +33,7 @@ exports.default = new forgescript_1.NativeFunction({
         (0, array_1.default)()
     ],
     async execute(ctx, [prop, sep]) {
-        const giveaways = await __1.Database.getAll();
+        const giveaways = __1.Database.live(await __1.Database.getAll());
         if (prop)
             return this.success(giveaways.map((x) => giveaway_1.GiveawayProperties[prop](x, sep)).join(sep ?? ", "));
         return this.successJSON(giveaways);

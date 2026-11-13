@@ -57,6 +57,8 @@ exports.default = new forgescript_1.NativeFunction({
     async execute(ctx, [guild, filter, prop, sep]) {
         const f = filter ?? GiveawayFilter.all;
         let list = await structures_1.Database.find(f === GiveawayFilter.ended ? { guildID: guild.id, hasEnded: true } : f === GiveawayFilter.all ? { guildID: guild.id } : { guildID: guild.id, hasEnded: false });
+        // Active giveaways as held in memory, so entry counts are current.
+        list = structures_1.Database.live(list);
         if (f === GiveawayFilter.active)
             list = list.filter((g) => !g.isPaused());
         if (f === GiveawayFilter.paused)

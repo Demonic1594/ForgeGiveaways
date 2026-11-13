@@ -29,8 +29,8 @@ exports.default = new forgescript_1.NativeFunction({
         if (!(await (0, scope_1.scopedGiveaway)(ctx, id, guild)))
             return this.success(false);
         // Through the manager so the end timer and pending writes are dropped too.
-        const result = await ctx.client.getExtension(__1.ReForgeGiveaways, true).giveawaysManager.discard(id);
-        return this.success(result.affected === 1);
+        const result = await ctx.client.getExtension(__1.ReForgeGiveaways, true).giveawaysManager.discard(id).catch(ctx.noop);
+        return this.success(result?.affected === 1);
     }
 });
 //# sourceMappingURL=deleteGiveaway.js.map

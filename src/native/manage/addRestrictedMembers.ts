@@ -3,7 +3,7 @@ import { ArgType, NativeFunction } from "@tryforge/forgescript"
 export default new NativeFunction({
     name: "$addRestrictedMembers",
     version: "1.0.0",
-    description: "Adds restricted members to the current giveaway",
+    description: "Adds restricted members to the giveaway being started or edited",
     aliases: ["$addRestrictedMember"],
     unwrap: true,
     brackets: true,

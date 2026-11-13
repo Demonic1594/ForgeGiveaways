@@ -1,9 +1,10 @@
 import { GiveawayDenyReason } from "./Giveaway";
 /**
- * Texts used by the default messages. Override any of them through the
+ * Every text used by the default messages, including the embed itself, so the
+ * whole giveaway can be translated. Override any of them through the
  * `messages` option. Placeholders in braces are replaced at send time:
  * `{prize}`, `{mentions}`, `{count}`, `{s}` (plural suffix), `{reason}`,
- * `{guild}`, `{link}`, `{host}`, `{tickets}`.
+ * `{guild}`, `{link}`, `{tickets}`, `{roles}`, `{time}`, `{bonuses}`.
  */
 export declare const DEFAULT_MESSAGES: {
     title: string;
@@ -14,8 +15,29 @@ export declare const DEFAULT_MESSAGES: {
     pausedFooter: string;
     endedFooter: string;
     cancelledFooter: string;
+    entryMethodButton: string;
+    entryMethodReaction: string;
+    embedPrize: string;
+    embedWinnersCount: string;
+    embedRequiredRoles: string;
+    embedAnyRole: string;
+    embedRestrictedRoles: string;
+    embedMinAccountAge: string;
+    embedMinMemberAge: string;
+    embedBonusEntries: string;
+    embedMaxEntries: string;
+    embedWinners: string;
+    embedNoWinners: string;
+    embedMoreWinners: string;
+    embedTotalEntries: string;
+    fieldEnds: string;
+    fieldTimeLeft: string;
+    fieldEnded: string;
+    fieldHost: string;
+    fieldEntries: string;
     startPing: string;
     joined: string;
+    joinedTickets: string;
     left: string;
     denied: string;
     ended: string;
@@ -32,6 +54,7 @@ export declare const DEFAULT_MESSAGES: {
     noWinners: string;
     reroll: string;
     winnerDM: string;
+    unknownGuild: string;
     reasonBot: string;
     reasonHost: string;
     reasonMissingRoles: string;

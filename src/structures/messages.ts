@@ -1,10 +1,11 @@
 import { GiveawayDenyReason } from "./Giveaway"
 
 /**
- * Texts used by the default messages. Override any of them through the
+ * Every text used by the default messages, including the embed itself, so the
+ * whole giveaway can be translated. Override any of them through the
  * `messages` option. Placeholders in braces are replaced at send time:
  * `{prize}`, `{mentions}`, `{count}`, `{s}` (plural suffix), `{reason}`,
- * `{guild}`, `{link}`, `{host}`, `{tickets}`.
+ * `{guild}`, `{link}`, `{tickets}`, `{roles}`, `{time}`, `{bonuses}`.
  */
 export const DEFAULT_MESSAGES = {
     title: "🎉 GIVEAWAY 🎉",
@@ -15,8 +16,29 @@ export const DEFAULT_MESSAGES = {
     pausedFooter: "Entries are paused",
     endedFooter: "Thanks for participating!",
     cancelledFooter: "This giveaway was cancelled",
+    entryMethodButton: "button",
+    entryMethodReaction: "reaction",
+    embedPrize: "🎁 **Prize:** {prize}",
+    embedWinnersCount: "🏆 **Winners:** {count}",
+    embedRequiredRoles: "📌 **Required Role{s}{any}:** {roles}",
+    embedAnyRole: " (any)",
+    embedRestrictedRoles: "🚫 **Excluded Roles:** {roles}",
+    embedMinAccountAge: "🗓️ **Min. Account Age:** {time}",
+    embedMinMemberAge: "🕰️ **Min. Time in Server:** {time}",
+    embedBonusEntries: "✨ **Bonus Entries:** {bonuses}",
+    embedMaxEntries: "👥 **Max Entries:** {count}",
+    embedWinners: "🏆 **Winner{s}:** {mentions}",
+    embedNoWinners: "None",
+    embedMoreWinners: "and {count} more",
+    embedTotalEntries: "👥 **Total Entries:** {count}",
+    fieldEnds: "Ends",
+    fieldTimeLeft: "Time Left",
+    fieldEnded: "Ended",
+    fieldHost: "Hosted by",
+    fieldEntries: "Entries",
     startPing: "{ping} 🎉 A new giveaway has started!",
     joined: "✅ You joined the giveaway for **{prize}**!{tickets}",
+    joinedTickets: " ({count} entries)",
     left: "👋 You left the giveaway for **{prize}**.",
     denied: "❌ You can't enter this giveaway: {reason}",
     ended: "⌛ This giveaway has already ended.",
@@ -33,6 +55,7 @@ export const DEFAULT_MESSAGES = {
     noWinners: "😢 There were no valid entries, so **{prize}** has no winners.",
     reroll: "🔁 Rerolled! Congratulations to the new winner{s} of **{prize}**!\n🏆 {mentions}",
     winnerDM: "🎉 You won **{prize}** in **{guild}**!\n{link}",
+    unknownGuild: "the server",
     reasonBot: "bots can't enter giveaways.",
     reasonHost: "the host can't enter their own giveaway.",
     reasonMissingRoles: "you don't have the required role(s).",

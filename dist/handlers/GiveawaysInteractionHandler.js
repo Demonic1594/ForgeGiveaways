@@ -34,6 +34,7 @@ class GiveawaysInteractionHandler {
     }
     /** Last join/leave per giveaway and user, for the anti-spam cooldown. */
     #lastToggle = new Map();
+    #lastSweep = 0;
     /** Returns the remaining cooldown in ms (0 if none) and records the click. */
     #cooldown(key, ms) {
         if (ms <= 0)
@@ -43,8 +44,11 @@ class GiveawaysInteractionHandler {
         if (last !== undefined && now - last < ms)
             return ms - (now - last);
         this.#lastToggle.set(key, now);
-        // Keep the map small: drop stale keys once it grows.
-        if (this.#lastToggle.size > 10_000) {
+        // Keep the map small: drop expired keys once it grows. At most once
+        // per cooldown period, because during a mass join every key is still
+        // fresh and a scan on each click would find nothing to drop.
+        if (this.#lastToggle.size > 10_000 && now - this.#lastSweep >= ms) {
+            this.#lastSweep = now;
             for (const [k, t] of this.#lastToggle)
                 if (now - t >= ms)
                     this.#lastToggle.delete(k);
@@ -81,7 +85,12 @@ class GiveawaysInteractionHandler {
         const { useDefault } = ext.options;
         const m = ext.options.messages;
         let deferred = false;
-        const reply = (content) => !useDefault
+        // With custom messages the entry events answer the click. A click no
+        // event will answer (nothing listens, or there is no event for it)
+        // still gets the default reply: an unanswered click shows "This
+        // interaction failed" even when the entry worked.
+        const answeredBy = (event) => !useDefault && !!event && ext.emitter.listenerCount(event) > 0;
+        const reply = (content, event) => answeredBy(event)
             ? undefined
             : deferred
                 ? interaction.editReply({ content, allowedMentions: { parse: [] } }).catch(noop_1.default)
@@ -93,10 +102,14 @@ class GiveawaysInteractionHandler {
             (0, error_1.throwGiveawaysError)(error_1.GiveawaysErrorType.UnknownGiveaway, interaction.message.id);
             return reply(m.unknown);
         }
-        if (giveaway.hasEnded)
-            return reply(m.ended);
-        if (giveaway.isPaused())
-            return reply(m.paused);
+        // If a giveawayEntryRevoke event wants to answer, let the click go on:
+        // the manager refuses it and fires that event with the reason.
+        if (!answeredBy("giveawayEntryRevoke")) {
+            if (giveaway.hasEnded)
+                return reply(m.ended);
+            if (giveaway.isPaused())
+                return reply(m.paused);
+        }
         const user = interaction.user;
         // Anti-spam: join/leave toggles are rate limited per user and giveaway,
         // so one person can't flood your entry events or the database.
@@ -122,12 +135,15 @@ class GiveawaysInteractionHandler {
         switch (result.action) {
             case "added": {
                 const w = result.giveaway.weightOf(user.id);
-                return reply((0, messages_1.format)(m.joined, { prize: (0, utils_1.truncate)(result.giveaway.prize, 200), tickets: w > 1 ? ` (${w} entries)` : "" }));
+                return reply((0, messages_1.format)(m.joined, {
+                    prize: (0, utils_1.truncate)(result.giveaway.prize, 200),
+                    tickets: w > 1 ? (0, messages_1.format)(m.joinedTickets, { count: w }) : "",
+                }), "giveawayEntryAdd");
             }
             case "removed":
-                return reply((0, messages_1.format)(m.left, { prize: (0, utils_1.truncate)(result.giveaway.prize, 200) }));
+                return reply((0, messages_1.format)(m.left, { prize: (0, utils_1.truncate)(result.giveaway.prize, 200) }), "giveawayEntryRemove");
             case "denied":
-                return reply((0, messages_1.format)(m.denied, { reason: (0, messages_1.denyReasonText)(m, result.reason) }));
+                return reply((0, messages_1.format)(m.denied, { reason: (0, messages_1.denyReasonText)(m, result.reason) }), "giveawayEntryRevoke");
         }
     }
 }
