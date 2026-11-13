@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const forgescript_1 = require("@tryforge/forgescript");
 const __1 = require("../..");
 const structures_1 = require("../../structures");
+const scope_1 = require("../../functions/scope");
 exports.default = new forgescript_1.NativeFunction({
     name: "$startGiveaway",
     version: "1.0.0",
@@ -58,6 +59,8 @@ exports.default = new forgescript_1.NativeFunction({
             return this.customError("Duration must be greater than 0");
         if (!prize.trim())
             return this.customError("Prize must not be empty");
+        if (!(0, scope_1.canStartIn)(ctx, channel.guildId))
+            return this.customError("Giveaways can only be started in channels of the current server");
         const client = ctx.client.getExtension(__1.ReForgeGiveaways, true);
         const b = ctx.giveawayBuilder;
         const giveaway = await client.giveawaysManager.start({

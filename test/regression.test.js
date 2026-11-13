@@ -361,3 +361,14 @@ test("cleaning up ended giveaways skips results that still have to be announced"
     assert.ok(await Database.get(pending.id), "its winners were never announced: kept for the next start")
     await Database.delete(pending.id)
 })
+
+test("a command can only start giveaways in channels of its own guild", () => {
+    const { canStartIn } = require("../dist/functions/scope")
+    const none = { guild: null, interaction: null, message: null, channel: null, user: null }
+    assert.equal(canStartIn({ ...none, guild: { id: "1" } }, "1"), true)
+    assert.equal(canStartIn({ ...none, guild: { id: "1" } }, "2"), false, "a channel of another server")
+    assert.equal(canStartIn({ ...none, interaction: { guildId: "1" }, user: {} }, "2"), false)
+    assert.equal(canStartIn({ ...none, message: { guildId: "1" }, user: {} }, "1"), true)
+    assert.equal(canStartIn(none, "2"), true, "giveaway and ready events pick their own channel")
+    assert.equal(canStartIn({ ...none, message: { guildId: null }, user: {} }, "2"), true, "a DM command")
+})

@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.canStartIn = canStartIn;
 exports.scopedGiveaway = scopedGiveaway;
 const structures_1 = require("../structures");
 const error_1 = require("./error");
@@ -19,6 +20,17 @@ function contextScope(ctx) {
     if (guildID)
         return guildID;
     return ctx.interaction || ctx.message || ctx.channel || ctx.user ? false : null;
+}
+/**
+ * Whether a context may start a giveaway in a channel of `channelGuildID`.
+ * A command running in one guild can't post a giveaway into another guild's
+ * channel. Contexts without a guild (giveaway events, `ready`, direct
+ * messages) pick the channel themselves and are not restricted: starting a
+ * giveaway changes nothing that already exists.
+ */
+function canStartIn(ctx, channelGuildID) {
+    const scope = contextScope(ctx);
+    return !scope || scope === channelGuildID;
 }
 /**
  * Loads a giveaway for a mutating function and enforces guild scoping:
