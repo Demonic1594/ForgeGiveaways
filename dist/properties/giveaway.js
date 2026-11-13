@@ -18,6 +18,7 @@ var GiveawayProperty;
     GiveawayProperty["cancelled"] = "cancelled";
     GiveawayProperty["endedAt"] = "endedAt";
     GiveawayProperty["isPaused"] = "isPaused";
+    GiveawayProperty["pausedAt"] = "pausedAt";
     GiveawayProperty["hostID"] = "hostID";
     GiveawayProperty["guildID"] = "guildID";
     GiveawayProperty["channelID"] = "channelID";
@@ -36,6 +37,10 @@ var GiveawayProperty;
     GiveawayProperty["minMemberAge"] = "minMemberAge";
     GiveawayProperty["bonusEntries"] = "bonusEntries";
     GiveawayProperty["description"] = "description";
+    GiveawayProperty["color"] = "color";
+    GiveawayProperty["image"] = "image";
+    GiveawayProperty["thumbnail"] = "thumbnail";
+    GiveawayProperty["pingRoleID"] = "pingRoleID";
     GiveawayProperty["excludeHost"] = "excludeHost";
     GiveawayProperty["url"] = "url";
 })(GiveawayProperty || (exports.GiveawayProperty = GiveawayProperty = {}));
@@ -52,6 +57,7 @@ exports.GiveawayProperties = (0, defineProperties_1.default)({
     cancelled: (i) => (i ? !!i.cancelled : undefined),
     endedAt: (i) => i?.endedAt,
     isPaused: (i) => i?.isPaused(),
+    pausedAt: (i) => i?.pausedAt,
     hostID: (i) => i?.hostID,
     guildID: (i) => i?.guildID,
     channelID: (i) => i?.channelID,
@@ -70,6 +76,10 @@ exports.GiveawayProperties = (0, defineProperties_1.default)({
     minMemberAge: (i) => i?.requirements?.minMemberAge,
     bonusEntries: (i, sep) => i?.bonusEntries?.map((b) => `${b.roleID}:${b.amount}`).join(sep ?? ", "),
     description: (i) => i?.display?.description,
+    color: (i) => (i?.display?.color != null ? `#${i.display.color.toString(16).padStart(6, "0")}` : undefined),
+    image: (i) => i?.display?.image,
+    thumbnail: (i) => i?.display?.thumbnail,
+    pingRoleID: (i) => i?.display?.pingRoleID,
     excludeHost: (i) => (i ? !!i.requirements?.excludeHost : undefined),
     url: (i) => i?.url() ?? undefined,
 });

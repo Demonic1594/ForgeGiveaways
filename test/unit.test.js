@@ -279,3 +279,12 @@ test("the extension is ReForgeGiveaways, distinct from the original", () => {
     assert.equal(new pkg.ReForgeGiveaways({ handleSignals: false }).name, "reforge.giveaways")
     assert.equal(require("../package.json").name, "@tryforge/reforge.giveaways")
 })
+
+test("only real texts override a default message", () => {
+    const { ReForgeGiveaways, DEFAULT_MESSAGES } = require("../dist")
+    const { messages } = new ReForgeGiveaways({ handleSignals: false, messages: { joined: undefined, left: "Bye", ended: 5, notAKey: "x" } }).options
+    assert.equal(messages.joined, DEFAULT_MESSAGES.joined, "undefined keeps the default (2.0.0 blanked it and then crashed formatting it)")
+    assert.equal(messages.ended, DEFAULT_MESSAGES.ended)
+    assert.equal(messages.left, "Bye")
+    assert.equal("notAKey" in messages, false)
+})

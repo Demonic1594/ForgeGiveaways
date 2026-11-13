@@ -52,6 +52,8 @@ export default new NativeFunction({
     async execute(ctx, [guild, filter, prop, sep]) {
         const f = filter ?? GiveawayFilter.all
         let list = await Database.find(f === GiveawayFilter.ended ? { guildID: guild.id, hasEnded: true } : f === GiveawayFilter.all ? { guildID: guild.id } : { guildID: guild.id, hasEnded: false })
+        // Active giveaways as held in memory, so entry counts are current.
+        list = Database.live(list)
         if (f === GiveawayFilter.active) list = list.filter((g) => !g.isPaused())
         if (f === GiveawayFilter.paused) list = list.filter((g) => g.isPaused())
         list.sort((a, b) => b.timestamp - a.timestamp)

@@ -1,4 +1,4 @@
-import { execSync } from "child_process"
+import { execFileSync } from "child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
 import prompt from "./functions/prompt"
 import { join } from "path"
@@ -38,17 +38,20 @@ async function main() {
         json[version].unshift({
             message: msg,
             timestamp: new Date(),
-            author: execSync("git config user.name").toString().trim()
+            author: execFileSync("git", ["config", "user.name"]).toString().trim()
         })
         writeFileSync(fileName, JSON.stringify(json), "utf-8")
     }
 
     const branch = await prompt("Write the branch name to push to (defaults to dev): ") || "dev"
-    const escapedMsg = msg.replace(/\$/g, "\\$")
 
-    execSync("git branch -M " + branch + " && git add . && git commit -m \"" + escapedMsg + "\" && git push -u origin " + branch, {
-        stdio: "inherit"
-    })
+    // Arguments are passed to git as they are, never through a shell: a
+    // commit message with quotes, backticks or `$(...)` can't run commands.
+    const git = (...args: string[]) => execFileSync("git", args, { stdio: "inherit" })
+    git("branch", "-M", branch)
+    git("add", ".")
+    git("commit", "-m", msg)
+    git("push", "-u", "origin", branch)
 }
 
 // Nothing

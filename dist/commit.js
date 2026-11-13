@@ -33,15 +33,18 @@ async function main() {
         json[version].unshift({
             message: msg,
             timestamp: new Date(),
-            author: (0, child_process_1.execSync)("git config user.name").toString().trim()
+            author: (0, child_process_1.execFileSync)("git", ["config", "user.name"]).toString().trim()
         });
         (0, fs_1.writeFileSync)(fileName, JSON.stringify(json), "utf-8");
     }
     const branch = await (0, prompt_1.default)("Write the branch name to push to (defaults to dev): ") || "dev";
-    const escapedMsg = msg.replace(/\$/g, "\\$");
-    (0, child_process_1.execSync)("git branch -M " + branch + " && git add . && git commit -m \"" + escapedMsg + "\" && git push -u origin " + branch, {
-        stdio: "inherit"
-    });
+    // Arguments are passed to git as they are, never through a shell: a
+    // commit message with quotes, backticks or `$(...)` can't run commands.
+    const git = (...args) => (0, child_process_1.execFileSync)("git", args, { stdio: "inherit" });
+    git("branch", "-M", branch);
+    git("add", ".");
+    git("commit", "-m", msg);
+    git("push", "-u", "origin", branch);
 }
 // Nothing
 main();

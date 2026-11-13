@@ -5,6 +5,7 @@ exports.chunkJoin = chunkJoin;
 exports.chunk = chunk;
 exports.parseSnowflake = parseSnowflake;
 exports.formatDuration = formatDuration;
+exports.shardIdFor = shardIdFor;
 /**
  * Truncates text to a Discord limit, appending an ellipsis when cut.
  */
@@ -74,5 +75,13 @@ function formatDuration(ms) {
             break;
     }
     return parts.join(" ") || "0s";
+}
+/**
+ * The shard a guild belongs to, by Discord's formula `(guild_id >> 22) % shard_count`.
+ */
+function shardIdFor(guildID, shardCount) {
+    if (!SNOWFLAKE.test(guildID))
+        return 0;
+    return Number((BigInt(guildID) >> 22n) % BigInt(Math.max(1, Math.floor(shardCount))));
 }
 //# sourceMappingURL=text.js.map

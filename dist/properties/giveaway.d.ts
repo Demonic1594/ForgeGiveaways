@@ -11,6 +11,7 @@ export declare enum GiveawayProperty {
     cancelled = "cancelled",
     endedAt = "endedAt",
     isPaused = "isPaused",
+    pausedAt = "pausedAt",
     hostID = "hostID",
     guildID = "guildID",
     channelID = "channelID",
@@ -29,6 +30,10 @@ export declare enum GiveawayProperty {
     minMemberAge = "minMemberAge",
     bonusEntries = "bonusEntries",
     description = "description",
+    color = "color",
+    image = "image",
+    thumbnail = "thumbnail",
+    pingRoleID = "pingRoleID",
     excludeHost = "excludeHost",
     url = "url"
 }

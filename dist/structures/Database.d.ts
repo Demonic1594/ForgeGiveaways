@@ -44,12 +44,27 @@ export declare class Database extends GiveawaysDatabaseManager {
     private static repo;
     /** Creates a new, unsaved giveaway instance of the right class for the driver. */
     static create(options: ConstructorParameters<typeof Giveaway>[0]): Giveaway;
+    /**
+     * Whether this process is responsible for a guild's giveaways. Always true
+     * unless the bot is split over several processes (sharding), where each
+     * process only times, draws and caches the giveaways of its own guilds.
+     */
+    static owns: (guildID: Snowflake) => boolean;
     private static track;
     private static untrack;
     /** Loads every active giveaway into memory. */
     static loadActive(): Promise<Giveaway[]>;
     /** Active giveaways currently held in memory. */
     static activeGiveaways(): Giveaway[];
+    /** Whether a giveaway is active and held in memory. */
+    static isActive(id: Snowflake): boolean;
+    /** The in-memory copy of an active giveaway, without touching the database. */
+    static peek(id: Snowflake): Giveaway | null;
+    /**
+     * Swaps database rows of active giveaways for their in-memory copies,
+     * which also hold entry changes that are still waiting to be written.
+     */
+    static live<T extends Giveaway>(rows: T[]): T[];
     /**
      * Gets an existing giveaway.
      * @param id The id of the giveaway to get.
@@ -61,6 +76,11 @@ export declare class Database extends GiveawaysDatabaseManager {
     static getByMessage(messageID: Snowflake, channelID?: Snowflake): Promise<Giveaway | null>;
     /** Ended giveaways whose result was never announced (the bot stopped mid-way). */
     static findPendingAnnouncements(): Promise<Giveaway[]>;
+    /**
+     * Ids of giveaways that ended before `cutoff` and are done being announced.
+     * Only the columns needed to decide are loaded, not the entry lists.
+     */
+    static findEndedBefore(cutoff: number): Promise<string[]>;
     /** Gets all existing giveaways. */
     static getAll(): Promise<Giveaway[]>;
     /**

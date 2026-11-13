@@ -19,4 +19,8 @@ export declare function parseSnowflake(input: string | null | undefined): string
  * Turns a millisecond duration into a compact human string, e.g. "1y 3d 4h".
  */
 export declare function formatDuration(ms: number): string;
+/**
+ * The shard a guild belongs to, by Discord's formula `(guild_id >> 22) % shard_count`.
+ */
+export declare function shardIdFor(guildID: string, shardCount: number): number;
 //# sourceMappingURL=text.d.ts.map

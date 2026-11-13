@@ -8,6 +8,7 @@ export enum GiveawaysErrorType {
     MultipleStartEvents = `Detected multiple giveawayStart events, only one is allowed per client instance`,
     GiveawayNotActive = `Giveaway with ID "$1" has already ended and can no longer be entered`,
     WrongGuild = `Giveaway with ID "$1" belongs to another guild, refusing to modify it`,
+    NoGuildScope = `Refusing to modify giveaway with ID "$1" from a direct message, pass the guild ID argument to allow it`,
 }
 
 /**

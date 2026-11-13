@@ -2,9 +2,6 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MongoGiveaway = exports.Giveaway = exports.GiveawayDenyReason = exports.GiveawayLimits = void 0;
 const discord_js_1 = require("discord.js");
-/**
- * Why a member could not enter a giveaway. `null` means they can.
- */
 /** Hard limits, mostly so values fit the database columns and Discord. */
 exports.GiveawayLimits = {
     /** Longest prize, so announcements always fit around it. */
@@ -15,7 +12,15 @@ exports.GiveawayLimits = {
     bonus: 1_000_000,
     /** Longest description (embed limit with room for the rest). */
     description: 2000,
+    /**
+     * Latest end time (the last millisecond of the year 9999). Discord can't
+     * show later dates, so such a giveaway could never be posted.
+     */
+    endTimestamp: 253_402_300_799_999,
 };
+/**
+ * Why a member could not enter a giveaway. `null` means they can.
+ */
 var GiveawayDenyReason;
 (function (GiveawayDenyReason) {
     GiveawayDenyReason["Bot"] = "bot";
@@ -88,6 +93,11 @@ class Giveaway {
     entries;
     /** Entry weights for members who got bonus entries (sparse; absent means 1). */
     entryWeights;
+    /**
+     * Reaction mode only: entries added by hand (`$addGiveawayEntry`). They
+     * have no reaction, so the reaction sync must not treat them as "left".
+     */
+    manualEntries;
     /** The randomly selected winners of this giveaway. */
     winners;
     /** The previous winners of this giveaway. */
@@ -125,6 +135,7 @@ class Giveaway {
         this.pausedAt = null;
         this.entries = [];
         this.entryWeights = null;
+        this.manualEntries = null;
         this.winners = [];
         this.previousWinners = null;
         this.announcePending = null;
@@ -176,6 +187,8 @@ class Giveaway {
             this.entries.splice(idx, 1);
         if (this.entryWeights)
             delete this.entryWeights[userID];
+        if (this.manualEntries?.includes(userID))
+            this.manualEntries = this.manualEntries.filter((id) => id !== userID);
         return this;
     }
     /** Records how many tickets an entry counts for. */
@@ -329,6 +342,7 @@ class Giveaway {
             bonusEntries: this.bonusEntries ?? [],
             maxEntries: this.maxEntries ?? null,
             display: this.display ?? {},
+            url: this.url(),
         };
     }
 }

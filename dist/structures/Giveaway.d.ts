@@ -56,9 +56,6 @@ export interface IGiveaway extends IGiveawayStartOptions {
     winners: Snowflake[];
     previousWinners?: Snowflake[] | null;
 }
-/**
- * Why a member could not enter a giveaway. `null` means they can.
- */
 /** Hard limits, mostly so values fit the database columns and Discord. */
 export declare const GiveawayLimits: {
     /** Longest prize, so announcements always fit around it. */
@@ -69,7 +66,15 @@ export declare const GiveawayLimits: {
     readonly bonus: 1000000;
     /** Longest description (embed limit with room for the rest). */
     readonly description: 2000;
+    /**
+     * Latest end time (the last millisecond of the year 9999). Discord can't
+     * show later dates, so such a giveaway could never be posted.
+     */
+    readonly endTimestamp: 253402300799999;
 };
+/**
+ * Why a member could not enter a giveaway. `null` means they can.
+ */
 export declare enum GiveawayDenyReason {
     Bot = "bot",
     Host = "host",
@@ -118,6 +123,11 @@ export declare class Giveaway implements IGiveaway {
     entries: Snowflake[];
     /** Entry weights for members who got bonus entries (sparse; absent means 1). */
     entryWeights?: Record<Snowflake, number> | null;
+    /**
+     * Reaction mode only: entries added by hand (`$addGiveawayEntry`). They
+     * have no reaction, so the reaction sync must not treat them as "left".
+     */
+    manualEntries?: Snowflake[] | null;
     /** The randomly selected winners of this giveaway. */
     winners: Snowflake[];
     /** The previous winners of this giveaway. */
@@ -217,6 +227,7 @@ export declare class Giveaway implements IGiveaway {
         bonusEntries: IGiveawayBonusEntry[];
         maxEntries: number | null;
         display: IGiveawayDisplay;
+        url: string | null;
     };
 }
 /**

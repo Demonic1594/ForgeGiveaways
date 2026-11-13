@@ -47,6 +47,12 @@ const MAX_POSTPONE = 24 * 36e5
 const RETRY_FLUSH = 5_000
 /** How long a call waits for the database before giving up. */
 const READY_TIMEOUT = 30_000
+/** How long `start()` waits for a custom `giveawayStart` event to send its message. */
+const START_TIMEOUT = 30_000
+/** Shortest pause between two clean-ups of ended giveaways. */
+const MIN_SWEEP_INTERVAL = 60_000
+/** "This member is not in the guild" answers, as opposed to a failed request. */
+const NOT_A_MEMBER = new Set<unknown>([RESTJSONErrorCodes.UnknownMember, RESTJSONErrorCodes.UnknownUser])
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref?.())
 
@@ -65,7 +71,20 @@ function validate(o: Partial<IGiveawayStartOptions>) {
         if (!Number.isInteger(b.amount) || b.amount < 1 || b.amount > GiveawayLimits.bonus) fail(`Bonus entries must be between 1 and ${GiveawayLimits.bonus}`)
     }
     if ((o.display?.description?.length ?? 0) > GiveawayLimits.description) fail(`Giveaway description must be at most ${GiveawayLimits.description} characters`)
+    for (const key of ["minAccountAge", "minMemberAge"] as const) {
+        const age = o.requirements?.[key]
+        if (age != null && !(Number.isFinite(age) && age >= 0)) fail(`Giveaway ${key} must be a positive amount of time`)
+    }
+    const mode = o.requirements?.requiredRolesMode
+    if (mode != null && mode !== "all" && mode !== "any") fail(`Giveaway required roles mode must be "all" or "any"`)
 }
+
+/**
+ * Copies option objects before they are stored. Callers keep using theirs
+ * (the builder functions keep adding to `ctx.requirements`), and a stored
+ * giveaway must not change behind the database's back when they do.
+ */
+const copy = <T>(value: T): T => (value == null ? value : structuredClone(value))
 
 /**
  * Owns the life cycle of every giveaway: start, end, reroll, edit, pause,
@@ -90,6 +109,8 @@ export class GiveawaysManager {
     readonly #lock = new KeyedMutex()
     readonly #flushTimers = new Map<Snowflake, NodeJS.Timeout>()
     readonly #refreshTimers = new Map<Snowflake, NodeJS.Timeout>()
+    /** Custom start events in progress: resolved once the message was attached or the giveaway discarded. */
+    readonly #starting = new Map<Snowflake, () => void>()
     #sweepTimer: NodeJS.Timeout | null = null
     #ready: Promise<void>
     #markReady!: () => void
@@ -116,7 +137,7 @@ export class GiveawaysManager {
                     // e.g. the database was briefly unreachable: try again
                     // instead of losing the deadline until the next restart.
                     noop(e)
-                    if (!this.scheduler.has(id)) this.scheduler.schedule(id, Date.now() + RETRY_DELAY)
+                    this.#rearm(id)
                 })
         }, { maxDelay: WATCHDOG_INTERVAL })
         this.#ready = new Promise((res) => (this.#markReady = res))
@@ -205,19 +226,36 @@ export class GiveawaysManager {
         const f = this.#flushTimers.get(g.id)
         if (f) clearTimeout(f)
         this.#flushTimers.delete(g.id)
-        await Database.set(g)
+        try {
+            await Database.set(g)
+        } catch (e) {
+            // The write that was just cancelled may have been carrying entry
+            // changes that so far only exist in memory. Keep trying to save
+            // them, or they would be lost on the next restart.
+            if (Database.isActive(g.id)) this.#scheduleFlush(g.id, RETRY_FLUSH)
+            throw e
+        }
+    }
+
+    /**
+     * After a failed life cycle change: makes sure a giveaway that is still
+     * running has a timer. One that is already overdue is retried in a minute
+     * rather than at once, or a database outage would turn into a tight loop
+     * of failing draws.
+     */
+    #rearm(id: Snowflake) {
+        const cur = Database.peek(id)
+        if (!cur || cur.hasEnded || cur.isPaused()) return
+        this.scheduler.schedule(id, Math.max(cur.endTimestamp(), Date.now() + RETRY_DELAY))
     }
 
     /** Queues a coalesced write of entry changes. */
     private queueFlush(g: Giveaway) {
         const delay = this.giveaways.options.entryFlushDelay!
         if (delay <= 0) {
-            // Write now; if that fails the change is still in memory, so keep
-            // retrying in the background instead of losing it on restart.
-            return this.save(g).catch((e) => {
-                noop(e)
-                this.#scheduleFlush(g.id, RETRY_FLUSH)
-            })
+            // Write now; if that fails the change is still in memory and
+            // save() keeps retrying in the background.
+            return this.save(g).catch(noop)
         }
         this.#scheduleFlush(g.id, delay)
     }
@@ -283,7 +321,7 @@ export class GiveawaysManager {
     }
 
     private schedule(g: Giveaway) {
-        if (g.hasEnded || g.isPaused()) this.scheduler.cancel(g.id)
+        if (g.hasEnded || g.isPaused() || !Database.owns(g.guildID)) this.scheduler.cancel(g.id)
         else this.scheduler.schedule(g.id, g.endTimestamp())
     }
 
@@ -303,26 +341,58 @@ export class GiveawaysManager {
         if (!Number.isSafeInteger(Date.now() + duration)) throw new RangeError("Giveaway duration is too large")
         if (!Number.isFinite(winnersCount) || winnersCount < 1) throw new RangeError("Giveaway winners count must be at least 1")
         if (!options.prize?.trim()) throw new RangeError("Giveaway prize must not be empty")
+        if (Date.now() + duration > GiveawayLimits.endTimestamp) throw new RangeError("Giveaway must end before the year 10000")
         validate(options)
 
-        const giveaway = Database.create({ ...options, duration, winnersCount, prize: options.prize.trim() })
+        const giveaway = Database.create({
+            ...options,
+            duration,
+            winnersCount,
+            prize: options.prize.trim(),
+            requirements: copy(options.requirements),
+            bonusEntries: copy(options.bonusEntries),
+            display: copy(options.display),
+        })
         if (giveaway.maxEntries != null && !(giveaway.maxEntries >= 1)) giveaway.maxEntries = null
+        const { useDefault } = this.giveaways.options
         // Persist first, then post. If the bot dies in between, the next start
         // finds a giveaway without a message and posts it (see _restore);
         // the other order would leave a message whose button belongs to nothing.
-        return this.#lock.run(giveaway.id, async () => {
+        const started = await this.#lock.run(giveaway.id, async () => {
             await Database.set(giveaway)
 
-            if (this.giveaways.options.useDefault && !(await this.postMessage(giveaway))) {
-                throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, giveaway.id)
-                await Database.delete(giveaway.id).catch(noop)
-                return null
+            if (useDefault) {
+                const posted = await this.postMessage(giveaway).catch(async (e) => {
+                    await Database.delete(giveaway.id).catch(noop)
+                    throw e
+                })
+                if (!posted) {
+                    throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, giveaway.id)
+                    await Database.delete(giveaway.id).catch(noop)
+                    return null
+                }
             }
 
             this.schedule(giveaway)
-            this.emit("giveawayStart", giveaway.clone())
+            if (useDefault) this.emit("giveawayStart", giveaway.clone())
             return giveaway
         })
+        if (!started || useDefault) return started
+
+        // Custom messages: the giveawayStart event sends the message and
+        // reports back through attachMessage() or discard(). Wait for that, so
+        // the caller gets nothing back for a giveaway that never got a message.
+        if (!this.wants("giveawayStart")) return started
+        let timer: NodeJS.Timeout | undefined
+        await new Promise<void>((resolve) => {
+            this.#starting.set(giveaway.id, resolve)
+            timer = setTimeout(resolve, START_TIMEOUT)
+            timer.unref?.()
+            this.emit("giveawayStart", giveaway.clone())
+        })
+        clearTimeout(timer)
+        this.#starting.delete(giveaway.id)
+        return Database.peek(giveaway.id)
     }
 
     /** Sends the default giveaway message and saves its id. Returns false if it could not be sent. */
@@ -338,7 +408,15 @@ export class GiveawaysManager {
 
         if (this.giveaways.options.useReactions) await msg.react(this.giveaways.options.emoji!).catch(noop)
         giveaway.messageID = msg.id
-        await this.save(giveaway)
+        try {
+            await this.save(giveaway)
+        } catch (e) {
+            // A message whose giveaway doesn't know about it would be posted a
+            // second time on the next start: take it back.
+            giveaway.messageID = null
+            await msg.delete().catch(noop)
+            throw e
+        }
         return true
     }
 
@@ -348,12 +426,12 @@ export class GiveawaysManager {
      */
     public async attachMessage(id: Snowflake, messageID: Snowflake) {
         return this.#lock.run(id, async () => {
-            const g = await Database.get(id)
+            const g = (await Database.get(id))?.clone()
             if (!g) return null
             g.messageID = messageID
             await this.save(g)
             return g
-        })
+        }).finally(() => this.#starting.get(id)?.())
     }
 
     /** Removes a giveaway and its timers without announcing anything. */
@@ -362,7 +440,7 @@ export class GiveawaysManager {
             this.scheduler.cancel(id)
             this.clearTimers(id)
             return await Database.delete(id)
-        })
+        }).finally(() => this.#starting.get(id)?.())
     }
 
     /**
@@ -407,27 +485,32 @@ export class GiveawaysManager {
                 return null
             }
         }
-        return this.end(id)
+        // Past the grace period the giveaway ends with whoever can be reached.
+        return this._end(id, overdue >= MAX_POSTPONE)
     }
 
     /**
-     * Ends an existing giveaway and draws the winners.
+     * Ends an existing giveaway and draws the winners. If Discord can't be
+     * reached to check the entrants, this throws and the giveaway keeps
+     * running, rather than ending without winners.
      * @param id The id of the giveaway to end.
      */
     public async end(id: Snowflake) {
+        return this._end(id, false)
+    }
+
+    /** @internal @param lenient End even if members can't be fetched (they are skipped). */
+    public async _end(id: Snowflake, lenient: boolean) {
         await this.#awaitReady()
         return this.#lock.run(id, async () => {
             const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
 
-            this.scheduler.cancel(id)
-            this.clearTimers(id)
-
             // Reactions added or removed while the bot was offline count too.
             if (this.giveaways.options.useReactions) await this.#syncReactions(giveaway).catch(noop)
 
             try {
-                giveaway.winners = await this.drawWinners(giveaway, giveaway.winnersCount)
+                giveaway.winners = await this.drawWinners(giveaway, giveaway.winnersCount, undefined, lenient)
                 giveaway.hasEnded = true
                 giveaway.endedAt = Date.now()
                 giveaway.pausedAt = null
@@ -435,10 +518,14 @@ export class GiveawaysManager {
                 await this.save(giveaway)
             } catch (e) {
                 // Nothing was saved: the giveaway is still running, keep its timer.
-                const cur = await Database.get(id).catch(() => null)
-                if (cur && !cur.hasEnded) this.schedule(cur)
+                this.#rearm(id)
                 throw e
             }
+
+            // Only now that the end is saved: until then the timer and any
+            // pending entry write still belong to a running giveaway.
+            this.scheduler.cancel(id)
+            this.clearTimers(id)
 
             await this.#publish(giveaway, "end")
             return giveaway
@@ -475,18 +562,14 @@ export class GiveawaysManager {
             const giveaway = (await Database.get(id))?.clone()
             if (!giveaway || giveaway.hasEnded) return null
 
-            this.scheduler.cancel(id)
-            this.clearTimers(id)
             giveaway.hasEnded = true
             giveaway.cancelled = true
             giveaway.endedAt = Date.now()
             giveaway.pausedAt = null
             giveaway.winners = []
-            await this.save(giveaway).catch(async (e) => {
-                const cur = await Database.get(id).catch(() => null)
-                if (cur && !cur.hasEnded) this.schedule(cur)
-                throw e
-            })
+            await this.save(giveaway)
+            this.scheduler.cancel(id)
+            this.clearTimers(id)
             await this.updateMessage(giveaway)
 
             this.emit("giveawayCancel", giveaway.clone())
@@ -524,6 +607,34 @@ export class GiveawaysManager {
     }
 
     /**
+     * Replaces one current winner with a newly drawn one, for example when a
+     * prize was never claimed. The other winners keep their win, and nobody
+     * who won before is drawn.
+     * @param id The id of the giveaway.
+     * @param userID The winner to replace.
+     */
+    public async rerollWinner(id: Snowflake, userID: Snowflake) {
+        await this.#awaitReady()
+        return this.#lock.run(id, async () => {
+            const giveaway = (await Database.get(id))?.clone()
+            if (!giveaway || !giveaway.hasEnded || giveaway.cancelled || !giveaway.winners.includes(userID)) return null
+            const oldGiveaway = giveaway.clone()
+
+            const previous = [...new Set([...giveaway.previousWinners ?? [], userID])]
+            const [replacement] = await this.drawWinners(giveaway, 1, new Set([...previous, ...giveaway.winners]))
+            if (!replacement) return null
+
+            giveaway.previousWinners = previous
+            giveaway.winners = giveaway.winners.map((w) => (w === userID ? replacement : w))
+            giveaway.announcePending = "reroll"
+            await this.save(giveaway)
+
+            await this.#publish(giveaway, "reroll", [replacement], oldGiveaway)
+            return giveaway
+        })
+    }
+
+    /**
      * Edits a running giveaway.
      * @param id The id of the giveaway to edit.
      * @param options The options used to edit this giveaway.
@@ -541,8 +652,13 @@ export class GiveawaysManager {
             if (options.hostID) giveaway.hostID = options.hostID
             // Builder functions are additive, so merge instead of replacing:
             // "$setMinimumAccountAge[7d] $editGiveaway[...]" must not drop the required roles.
-            if (options.requirements && Object.keys(options.requirements).length) giveaway.requirements = { ...giveaway.requirements, ...options.requirements }
-            if (options.bonusEntries?.length) giveaway.bonusEntries = options.bonusEntries
+            if (options.requirements && Object.keys(options.requirements).length) giveaway.requirements = { ...giveaway.requirements, ...copy(options.requirements) }
+            // An empty list removes the bonuses; the ticket counts saved with
+            // each entry are then wrong, and every entry counts once again.
+            if (options.bonusEntries) {
+                giveaway.bonusEntries = options.bonusEntries.length ? copy(options.bonusEntries) : null
+                if (!giveaway.bonusEntries) giveaway.entryWeights = null
+            }
             if (options.maxEntries !== undefined) giveaway.maxEntries = options.maxEntries && options.maxEntries >= 1 ? Math.floor(options.maxEntries) : null
             if (options.display && Object.keys(options.display).length) giveaway.display = { ...giveaway.display, ...options.display }
 
@@ -567,7 +683,7 @@ export class GiveawaysManager {
 
             const floor = (giveaway.pausedAt ?? Date.now()) - giveaway.timestamp
             const next = Math.max(giveaway.duration + Math.trunc(ms), floor)
-            if (!Number.isSafeInteger(giveaway.timestamp + next)) return null
+            if (!(giveaway.timestamp + next <= GiveawayLimits.endTimestamp)) return null
             giveaway.duration = next
 
             await this.save(giveaway)
@@ -586,8 +702,10 @@ export class GiveawaysManager {
             if (!giveaway || giveaway.hasEnded || giveaway.isPaused()) return null
 
             giveaway.pausedAt = Date.now()
-            this.scheduler.cancel(id)
+            // Save first: if the write fails the giveaway is still running and
+            // must keep the timer that ends it.
             await this.save(giveaway)
+            this.scheduler.cancel(id)
             await this.updateMessage(giveaway)
             this.emit("giveawayPause", giveaway.clone())
             return giveaway
@@ -701,6 +819,9 @@ export class GiveawaysManager {
             if (member && !bypassRequirements && giveaway.requirementDenyReason(member, true)) return null
 
             giveaway.addEntry(userID, member ? giveaway.computeWeight(member) : 1)
+            // They have no reaction on the message, which the reaction sync
+            // would otherwise read as "left the giveaway".
+            if (this.giveaways.options.useReactions) (giveaway.manualEntries ??= []).push(userID)
             await this.save(giveaway)
             this.queueRefresh(giveaway)
             return giveaway
@@ -717,8 +838,11 @@ export class GiveawaysManager {
      * checked one by one, so only as many members are fetched as needed instead
      * of every entrant, and people who left the server or no longer meet the
      * requirements are skipped.
+     *
+     * Throws if members can't be looked up (unless `lenient`): a network
+     * error must not be mistaken for "everybody left the server".
      */
-    private async drawWinners(g: Giveaway, count: number, exclude?: Set<string>) {
+    private async drawWinners(g: Giveaway, count: number, exclude?: Set<string>, lenient = false) {
         const pool = exclude ? g.entries.filter((e) => !exclude.has(e)) : [...g.entries]
         if (!pool.length || count < 1) return []
 
@@ -755,7 +879,7 @@ export class GiveawaysManager {
 
                 const missing = batch.filter((id) => !fetched.has(id))
                 if (missing.length) {
-                    const got = await this.fetchMembers(guild, missing)
+                    const got = await this.fetchMembers(guild, missing, lenient)
                     for (const id of missing) fetched.set(id, got.get(id) ?? null)
                 }
 
@@ -780,7 +904,11 @@ export class GiveawaysManager {
         }
     }
 
-    private async fetchMembers(guild: Guild, ids: string[]) {
+    /**
+     * Fetches members by id; ids missing from the result are not in the guild.
+     * @param lenient Treat failed requests as "not in the guild" instead of throwing.
+     */
+    private async fetchMembers(guild: Guild, ids: string[], lenient = false) {
         const found = new Map<string, GuildMember>()
         const missing: string[] = []
         for (const id of ids) {
@@ -796,7 +924,10 @@ export class GiveawaysManager {
         } else {
             // Gateway member requests can time out; fall back to REST.
             const results = await Promise.allSettled(missing.map((id) => guild.members.fetch(id)))
-            for (const r of results) if (r.status === "fulfilled") found.set(r.value.id, r.value)
+            for (const r of results) {
+                if (r.status === "fulfilled") found.set(r.value.id, r.value)
+                else if (!lenient && !NOT_A_MEMBER.has((r.reason as { code?: unknown } | null)?.code)) throw r.reason
+            }
         }
         return found
     }
@@ -832,7 +963,7 @@ export class GiveawaysManager {
     private async dmWinners(g: Giveaway, winners: string[]) {
         const guild = this.client.guilds.cache.get(g.guildID)
         const link = g.messageID ? `https://discord.com/channels/${g.guildID}/${g.channelID}/${g.messageID}` : ""
-        const content = format(this.messages.winnerDM, { prize: shortPrize(g), guild: guild?.name ?? "the server", link }).slice(0, MAX_MESSAGE)
+        const content = format(this.messages.winnerDM, { prize: shortPrize(g), guild: guild?.name ?? this.messages.unknownGuild, link }).slice(0, MAX_MESSAGE)
         for (const id of winners) {
             const user = await this.client.users.fetch(id).catch(() => null)
             await user?.send({ content, allowedMentions: { parse: [] } }).catch(() => {})
@@ -881,7 +1012,7 @@ export class GiveawaysManager {
         const keep = this.giveaways.options.deleteEndedAfter
         if (keep && keep > 0) {
             await this.sweep(keep).catch(noop)
-            this.#sweepTimer = setInterval(() => this.sweep(keep).catch(noop), Math.min(keep, 6 * 36e5))
+            this.#sweepTimer = setInterval(() => this.sweep(keep).catch(noop), Math.max(MIN_SWEEP_INTERVAL, Math.min(keep, 6 * 36e5)))
             this.#sweepTimer.unref?.()
         }
     }
@@ -900,9 +1031,15 @@ export class GiveawaysManager {
                 const cur = await Database.get(g.id)
                 if (!cur || cur.hasEnded) return
 
-                if (useDefault && !cur.messageID) {
-                    if (await this.postMessage(cur)) Logger.info(`[ReForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
-                    else throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, cur.id)
+                if (!cur.messageID) {
+                    if (!useDefault) {
+                        // The custom start event never got to send its message: run it again.
+                        if (this.wants("giveawayStart")) this.emit("giveawayStart", cur.clone())
+                    } else if (await this.postMessage(cur.clone())) {
+                        Logger.info(`[ReForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
+                    } else {
+                        throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, cur.id)
+                    }
                     return
                 }
 
@@ -936,8 +1073,9 @@ export class GiveawaysManager {
         }
 
         let changed = false
+        const manual = new Set(g.manualEntries)
         for (const id of [...g.entries]) {
-            if (!reactors.has(id)) {
+            if (!reactors.has(id) && !manual.has(id)) {
                 g.removeEntry(id)
                 changed = true
             }
@@ -948,7 +1086,10 @@ export class GiveawaysManager {
             const guild = await this.getGuild(g.guildID)
             if (guild) {
                 for (const batch of chunk(newcomers, 100)) {
-                    const members = await this.fetchMembers(guild, batch)
+                    // Can't check them right now: leave their reactions alone,
+                    // the next sync (at the latest before the draw) tries again.
+                    const members = await this.fetchMembers(guild, batch).catch(() => null)
+                    if (!members) continue
                     for (const id of batch) {
                         const m = members.get(id)
                         if (m && !g.requirementDenyReason(m, true)) {
@@ -967,10 +1108,7 @@ export class GiveawaysManager {
 
     /** Deletes giveaways that ended more than `olderThan` ms ago. Returns how many. */
     public async sweep(olderThan: number) {
-        const cutoff = Date.now() - olderThan
-        const ended = await Database.find({ hasEnded: true })
-        const stale = ended.filter((g) => (g.endedAt ?? g.endTimestamp()) < cutoff).map((g) => g.id)
-        return Database.deleteMany(stale)
+        return Database.deleteMany(await Database.findEndedBefore(Date.now() - olderThan))
     }
 
     /** Stops all timers and writes pending changes. */

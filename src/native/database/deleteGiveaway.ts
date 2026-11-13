@@ -27,7 +27,7 @@ export default new NativeFunction({
     async execute(ctx, [id, guild]) {
         if (!(await scopedGiveaway(ctx, id, guild))) return this.success(false)
         // Through the manager so the end timer and pending writes are dropped too.
-        const result = await ctx.client.getExtension(ReForgeGiveaways, true).giveawaysManager.discard(id)
-        return this.success(result.affected === 1)
+        const result = await ctx.client.getExtension(ReForgeGiveaways, true).giveawaysManager.discard(id).catch(ctx.noop)
+        return this.success(result?.affected === 1)
     }
 })

@@ -7,7 +7,19 @@ import { TransformEvents } from "@tryforge/forge.db"
 import { Database, DEFAULT_MESSAGES, GiveawayMessages } from "./structures"
 import { GiveawaysErrorType } from "./functions/error"
 import noop from "./functions/noop"
+import { shardIdFor } from "./utils"
 import { description, version } from "../package.json"
+
+/** Longest the shutdown handler waits for pending writes before letting the process stop. */
+const SHUTDOWN_TIMEOUT = 5000
+
+/** The shards this process runs, if the bot is split over several processes. */
+function ownedShards(client: ForgeClient): { ids: number[], count: number } | null {
+    if (client.shard) return { ids: client.shard.ids, count: client.shard.count }
+    const { shards, shardCount } = client.options
+    if (Array.isArray(shards) && typeof shardCount === "number" && shards.length < shardCount) return { ids: shards, count: shardCount }
+    return null
+}
 
 export interface IReForgeGiveawaysOptions {
     /** The giveaway events to use. */
@@ -93,7 +105,9 @@ export class ReForgeGiveaways extends ForgeExtension {
         o.messageUpdateDelay = Math.max(1000, o.messageUpdateDelay ?? 5000)
         o.handleSignals ??= true
         o.colors = { active: "Green", paused: "Yellow", ended: "Red", cancelled: "Grey", ...o.colors }
-        o.messages = { ...DEFAULT_MESSAGES, ...o.messages }
+        // Only real texts override a default: `{ joined: undefined }` must not blank it.
+        const texts = Object.entries(o.messages ?? {}).filter(([key, text]) => key in DEFAULT_MESSAGES && typeof text === "string")
+        o.messages = { ...DEFAULT_MESSAGES, ...Object.fromEntries(texts) }
     }
 
     public async init(client: ForgeClient) {
@@ -115,6 +129,12 @@ export class ReForgeGiveaways extends ForgeExtension {
         if (!this.options.useDefault && !this.options.events?.includes("giveawayStart")) {
             throw new Error(GiveawaysErrorType.MissingStartEvent)
         }
+
+        // With several processes (sharding), each one only looks after the
+        // giveaways of its own guilds; otherwise every process would draw
+        // and announce every giveaway.
+        const shards = ownedShards(client)
+        if (shards) Database.owns = (guildID) => shards.ids.includes(shardIdFor(guildID, shards.count))
 
         // The manager exists right away; its methods wait for the database.
         this.giveawaysManager = new GiveawaysManager(client, this)
@@ -146,7 +166,9 @@ export class ReForgeGiveaways extends ForgeExtension {
     #handleSignals() {
         for (const signal of ["SIGINT", "SIGTERM"] as const) {
             process.once(signal, () => {
-                this.giveawaysManager.destroy().catch(noop).finally(() => {
+                // Don't let a hanging database keep the process from stopping.
+                const limit = new Promise<void>((r) => setTimeout(r, SHUTDOWN_TIMEOUT))
+                Promise.race([this.giveawaysManager.destroy().catch(noop), limit]).finally(() => {
                     // Re-raise with the default handler unless someone else handles it.
                     if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
                 })

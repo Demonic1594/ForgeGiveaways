@@ -162,7 +162,9 @@ test("README examples and every new function compile", async () => {
          $extendGiveaway[1;1d] $shortenGiveaway[1;1h] $rerollGiveaway[1;true;2]
          $editGiveaway[1;$guildID;$authorID;New prize;2]
          $addGiveawayEntry[1;$authorID;true] $removeGiveawayEntry[1;$authorID]
-         $deleteGiveaway[1] $wipeGiveaways[$guildID]`,
+         $deleteGiveaway[1] $wipeGiveaways[$guildID] $rerollGiveawayWinner[1;$authorID]
+         $clearGiveawayRequirements $clearBonusEntries $addBonusEntries[234567890123456789;2] $editGiveaway[1;$guildID]
+         $getGiveaway[1;pausedAt] $getGiveaway[1;color] $getGiveaway[1;pingRoleID]`,
         `$getGuildGiveaways[$guildID;active;prize;, ] $getGiveaway[1;timeLeft] $getAllGiveaways
          $giveawayEndTimestamp $giveawayTimeLeft $giveawayIsPaused $giveawayIsCancelled
          $giveawayEndedAt $giveawayEntriesCount $giveawayTotalTickets $giveawayMaxEntries
@@ -187,7 +189,8 @@ test("a deadline hit during a guild outage is retried, not ended without winners
     let ended = 0
     let status = "unavailable"
     const g = new Giveaway({ prize: "p", duration: 1000 })
-    Object.assign(manager, { client: { isReady: () => true }, end: async () => { ended++ }, guildStatus: async () => status, schedule() {} })
+    const lenient = []
+    Object.assign(manager, { client: { isReady: () => true }, _end: async (_id, l) => { ended++; lenient.push(l) }, guildStatus: async () => status, schedule() {} })
     manager.scheduler = new Scheduler(() => {})
     const realGet = Database.get
     Database.get = async () => g
@@ -205,6 +208,7 @@ test("a deadline hit during a guild outage is retried, not ended without winners
         mock.timers.setTime(g.endTimestamp() + 25 * 36e5)
         await manager._onDeadline(g.id)
         assert.equal(ended, 2)
+        assert.deepEqual(lenient, [false, true], "only the last resort ends without being able to check members")
 
         manager.client.isReady = () => false // disconnected
         mock.timers.setTime(g.endTimestamp() + 5)
@@ -254,4 +258,34 @@ test("reaction mode counts reactions added and removed while offline", () => {
     assert.deepEqual(r.entries, r.expected, "entries match the reactions (bots ignored)")
     assert.deepEqual(r.winners, r.expected)
     assert.ok(!r.winners.includes(r.left))
+})
+
+test("a crash before a custom start event sent its message runs the event again on restart", () => {
+    const dir = tmp()
+    const s = phase(dir, "customCrashMidStart")
+    const r = phase(dir, "customRestart", s.id)
+    assert.ok(r.attached, "the giveaway got its message")
+    assert.equal(r.startEvents, 1)
+})
+
+test("a database of the original ForgeGiveaways 1.1.0 is upgraded in place", () => {
+    const dir = tmp()
+    // Exactly what the original creates on SQLite (dumped from a real 1.1.0 database).
+    const Sqlite = require("better-sqlite3")
+    const db = new Sqlite(path.join(dir, "giveaways.db"))
+    db.exec(`CREATE TABLE "giveaway" ("id" varchar PRIMARY KEY NOT NULL, "prize" varchar NOT NULL, "duration" integer NOT NULL, "timestamp" integer NOT NULL, "winnersCount" integer NOT NULL, "hasEnded" boolean NOT NULL, "hostID" varchar NOT NULL, "guildID" varchar NOT NULL, "channelID" varchar NOT NULL, "messageID" varchar, "entries" text NOT NULL, "winners" text NOT NULL, "previousWinners" text, "requirements" text)`)
+    const insert = db.prepare(`INSERT INTO giveaway VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    const now = Date.now()
+    insert.run("1570659133252702209", "Old prize", 20 * DAY, now - DAY, 2, 0, "111111111111111111", "300000000000000000", "200000000000000000", "500000000000000000", "600000000000000001,600000000000000002", "", null, JSON.stringify({ requiredRoles: ["400000000000000002"] }))
+    insert.run("1570659133303033858", "Ended one", 1000, now - 1000, 1, 1, "111111111111111111", "300000000000000000", "200000000000000000", null, "600000000000000001", "600000000000000001", null, null)
+    db.close()
+
+    const r = phase(dir, "upgraded")
+    assert.deepEqual(r.giveaways, [
+        { id: "1570659133252702209", prize: "Old prize", duration: 20 * DAY, hasEnded: false, cancelled: false, entries: ["600000000000000001", "600000000000000002"], winners: [], requirements: { requiredRoles: ["400000000000000002"] }, messageID: "500000000000000000" },
+        { id: "1570659133303033858", prize: "Ended one", duration: 1000, hasEnded: true, cancelled: false, entries: ["600000000000000001"], winners: ["600000000000000001"], requirements: null, messageID: null },
+    ])
+    assert.equal(r.scheduledAt, now - DAY + 20 * DAY, "the running one is timed for its original end")
+    assert.equal(r.joined, "added", "and can be entered")
+    assert.equal(r.entriesAfter, 3)
 })

@@ -37,7 +37,7 @@ ReForgeGiveaways is a reworked, hardened and feature-rich giveaway extension for
 - 🚫 **Abuse protection.** Join/leave spam cooldown, requirement and bonus-role re-checks at the draw, no bots, optional host exclusion, no mass pings.
 - 🎲 **Fair draws.** Cryptographically secure, unbiased and tested statistically, with weighted draws for bonus entries.
 - ⚡ **Fast at any size.** 100,000 entrants join, draw and save in well under a second.
-- ✨ **Feature rich.** Pause and resume, extend and shorten, cancel, bonus entries, entry caps, account and member age requirements, an info button with win chances, winner DMs, live entry counter, fully customizable texts and look.
+- ✨ **Feature rich.** Pause and resume, extend and shorten, cancel, bonus entries, entry caps, account and member age requirements, replacing a single winner, an info button with win chances, winner DMs, live entry counter, and every text translatable.
 
 <details>
 <summary><b>Everything fixed compared to ForgeGiveaways 1.1.0</b></summary>
@@ -118,7 +118,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 | `entryCooldown` | `3000` | Minimum ms between two join/leave clicks of one member on one giveaway; `0` disables it |
 | `dmWinners` | `false` | Send winners a direct message |
 | `colors` | green, yellow, red, grey | Embed colors for `active`, `paused`, `ended`, `cancelled` |
-| `messages` | see `DEFAULT_MESSAGES` | Override any text of the default messages |
+| `messages` | see `DEFAULT_MESSAGES` | Override any text of the default messages, including every line of the embed |
 | `entryFlushDelay` | `1000` | Write entry changes at most this often (ms) per giveaway; `0` writes on every click |
 | `messageUpdateDelay` | `5000` | Refresh the entry counter at most this often (ms) |
 | `deleteEndedAfter` | off | Delete ended giveaways this many ms after they ended |
@@ -127,7 +127,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 > ⚠️ **Warning**\
 > Reaction mode (`useReactions: true`) needs the `GuildMessageReactions` intent and the `Message` and `Reaction` partials.
 
-Texts in `messages` can use these placeholders: `{prize}`, `{mentions}`, `{s}` (plural "s"), `{reason}`, `{guild}`, `{link}`, `{tickets}`, `{ping}`, `{entryMethod}`.
+Texts in `messages` can use these placeholders: `{prize}`, `{mentions}`, `{count}`, `{s}` (plural "s"), `{reason}`, `{guild}`, `{link}`, `{tickets}`, `{ping}`, `{entryMethod}`, `{roles}`, `{time}`, `{bonuses}`. Each text only fills the placeholders its default uses.
 
 ```js
 new ReForgeGiveaways({
@@ -136,6 +136,27 @@ new ReForgeGiveaways({
     messages: { joined: "You're in for **{prize}**! Good luck.{tickets}" }
 })
 ```
+
+Every text of the giveaway message is in `messages` too, so it can be translated completely:
+
+```js
+new ReForgeGiveaways({
+    buttonLabel: "Teilnehmen",
+    messages: {
+        title: "🎉 VERLOSUNG 🎉",
+        embedPrize: "🎁 **Preis:** {prize}",
+        embedWinnersCount: "🏆 **Gewinner:** {count}",
+        fieldEnds: "Endet",
+        fieldHost: "Veranstaltet von",
+        fieldEntries: "Teilnahmen",
+        entryMethodButton: "Knopf",
+        footer: "Klick auf den {entryMethod}, um teilzunehmen!"
+    }
+})
+```
+
+> ℹ️ **Note**\
+> The full list of keys is `DEFAULT_MESSAGES` in [src/structures/messages.ts](src/structures/messages.ts).
 
 <h3 align="center">Starting Giveaways</h3><hr>
 
@@ -183,6 +204,8 @@ Use these before `$startGiveaway` or `$editGiveaway`.
 | `$setGiveawayColor[color]` | Embed color |
 | `$setGiveawayImage[url]` / `$setGiveawayThumbnail[url]` | Embed image and thumbnail |
 | `$setGiveawayPingRole[role]` | Role pinged when the giveaway starts |
+| `$clearGiveawayRequirements` | With `$editGiveaway`: remove all requirements; ones added after it start from scratch |
+| `$clearBonusEntries` | With `$editGiveaway`: remove all bonus entry roles |
 
 #### Managing
 All return `true` on success. The optional last `guild ID` argument is explained under [Guild Scoping](#guild-scoping).
@@ -192,6 +215,7 @@ All return `true` on success. The optional last `guild ID` argument is explained
 | `$startGiveaway[channel;host;prize;duration;winners?]` | Start a giveaway; returns its ID |
 | `$endGiveaway[id;guild?]` | End now and draw the winners |
 | `$rerollGiveaway[id;unique?;amount?;guild?]` | Draw new winners; `unique` excludes everyone who already won |
+| `$rerollGiveawayWinner[id;user;guild?]` | Replace one winner (e.g. an unclaimed prize); the others keep their win |
 | `$editGiveaway[id;guild;host?;prize?;winners?]` | Change a running giveaway |
 | `$extendGiveaway[id;time;guild?]` / `$shortenGiveaway[id;time;guild?]` | Move the end time |
 | `$pauseGiveaway[id;guild?]` / `$resumeGiveaway[id;guild?]` | Freeze and unfreeze the timer and entries |
@@ -221,7 +245,10 @@ Every field also has its own `$giveawayX[id?]` function: `ID`, `Prize`, `Duratio
 > The full list with every argument is in [metadata/functions.json](metadata/functions.json).
 
 #### Guild Scoping
-Management functions only act on giveaways of the guild given as the last argument or, if you leave it out, of the guild the command runs in, so one server can never end or edit another server's giveaway. In contexts without a guild (giveaway events, `ready`) they are unrestricted.
+Management functions only act on giveaways of the guild given as the last argument or, if you leave it out, of the guild the command runs in, so one server can never end or edit another server's giveaway. In contexts nobody outside the bot can trigger (giveaway events, `ready`) they are unrestricted.
+
+> ⚠️ **Warning**\
+> In direct messages there is no guild, so management functions do nothing there unless you pass the guild argument yourself. Only do that in commands restricted to people you trust, for example `$onlyForUsers[;$botOwnerID]`.
 
 <h3 align="center">Custom Messages</h3><hr>
 
@@ -229,6 +256,8 @@ You can disable the default messages by setting `useDefault: false` in the clien
 
 > ⚠️ **Warning**\
 > Only **one** `giveawayStart` event is allowed per client instance!
+
+`$startGiveaway` waits for your `giveawayStart` event and returns nothing if it did not return a valid message ID, so `$if[$get[id]==;...]` tells you whether the giveaway really started.
 
 #### Examples
 When using custom start messages, your event **must return the message ID** of the sent giveaway message. To ensure that only the message ID is returned (and no additional text), use the `$return[]` function.
@@ -275,7 +304,7 @@ Anything after a `-` is ignored, so `giveawayEntry-1` works too. The info button
 <sub>*See the `giveawayStart` example above for reference.*</sub>
 
 \
-Through the entry-related events, you can send custom responses directly to the current interaction context.
+Through the entry-related events, you can send custom responses directly to the current interaction context. With `useDefault: false`, a click is answered by your `giveawayEntryAdd`, `giveawayEntryRemove` or `giveawayEntryRevoke` event; for any of them you don't listen to, the built-in reply is sent, so a click never ends in "This interaction failed".
 
 #### Examples
 ```js
@@ -328,13 +357,15 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 | The bot restarted | Re-arms every running giveaway for its original end time. Paused giveaways stay paused, with the same time left |
 | A giveaway ended while the bot was offline | Draws and announces it right away, one giveaway at a time. The result shows the scheduled end time |
 | The bot crashed after drawing winners but before announcing them | Announces them and fires `giveawayEnd`, exactly once, without drawing again |
-| The bot crashed after saving a new giveaway but before posting it | Posts the message |
+| The bot crashed after saving a new giveaway but before posting it | Posts the message (with custom messages: runs your `giveawayStart` event again) |
+| Members can't be looked up while drawing (network error) | The draw fails and is retried a minute later, instead of ending with "no winners" |
 | Reactions changed while offline (reaction mode) | Counts them on restart and again right before every draw |
 | Entry counters went stale while offline | Refreshes the giveaway messages |
 | The database is unreachable at boot | Retries with backoff; commands give up after 30 s instead of hanging |
 | A Discord outage at the end time | Retries every minute instead of ending with no winners; after a day it ends anyway |
 | The bot is disconnected at the end time | Retries every minute until it is back |
-| A database write fails while ending | Nothing changes: the giveaway keeps running and its timer is re-armed |
+| A database write fails while ending, pausing or cancelling | Nothing changes: the giveaway keeps running with its timer; an overdue draw is retried every minute |
+| A database write of an entry fails | The entry stays in memory and the write is retried every 5 s |
 | The host slept or its clock jumped | Ends are never more than 30 s late |
 | A click arrives while the giveaway is busy | The click is acknowledged in time, so users never see "This interaction failed" |
 
@@ -352,7 +383,7 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 | Prizes with `@everyone`, role pings or `{placeholders}` | Only winners are ever pinged; placeholders inside a prize are not expanded |
 | Huge prizes or winner counts | Prizes up to 1,024 characters, counts up to 2^31 - 1; announcements always fit Discord's limits |
 | Mass joins on big giveaways | Joining takes constant time; 100,000 joins take well under a second |
-| Touching another server's giveaway by ID | Management functions are scoped to their own guild |
+| Touching another server's giveaway by ID | Management functions are scoped to their own guild, and refuse to act from direct messages |
 
 <h3 align="center">Switching from ForgeGiveaways</h3><hr>
 
@@ -369,10 +400,14 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 
 <h3 align="center">Notes and Limits</h3><hr>
 
-- Running giveaways are kept in memory, which assumes one bot process owns the giveaway table (the normal setup). Don't point two running bots at the same giveaway database.
+- Running giveaways are kept in memory, which assumes one bot process owns each giveaway. Don't point two different bots at the same giveaway database.
+- Sharding: when the bot runs as several processes, each process only times, draws and caches the giveaways of its own guilds. This follows Discord's shard formula and is covered by a test, but has not been run on a live sharded bot.
 - Bonus entries count the roles a member has at the time of the draw.
 - Entries of an ended giveaway can't be changed; they are the record the winners were drawn from.
-- MongoDB support follows the original schema but has not been tested against a live MongoDB server.
+- In reaction mode, entries added with `$addGiveawayEntry` are kept even though they have no reaction.
+- Giveaways must end before the year 10000, the latest date Discord can display.
+- SQLite and PostgreSQL are tested. MySQL and MongoDB follow the same code paths but have not been tested against a live server.
+- `$startGiveaway` posts in whatever channel it is given. If the channel comes from user input, check that it belongs to the current server (for example `$if[$channelGuildID[$get[channel]]!=$guildID;...]`).
 
 <h3 align="center">Development</h3><hr>
 
@@ -383,7 +418,18 @@ npm test           # build, then run all tests (SQLite)
 npm run docgen     # regenerate metadata/*.json
 ```
 
-The test suite covers the scheduler, locking, statistical fairness, multi-process restart and crash scenarios, and a seeded fuzzer that runs thousands of random concurrent operations with injected database failures. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
+The test suite covers the scheduler, locking, statistical fairness, multi-process restart and crash scenarios, upgrading a database of the original extension, and a seeded fuzzer that runs thousands of random concurrent operations with injected database failures. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
+
+To run the single-process test files against PostgreSQL instead of SQLite, point them at an empty database:
+
+```bash
+npm i --no-save pg
+export GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
+node --test test/regression.test.js   # likewise adversarial.test.js and custom.test.js, each on an empty database
+```
+
+> ⚠️ **Warning**\
+> Never change the type or length of an existing column in `src/structures/schema.ts`. ForgeDB lets TypeORM synchronize the schema, and on PostgreSQL and MySQL TypeORM changes a column by dropping and re-creating it. Adding nullable columns is safe.
 
 <h3 align="center">Credits and License</h3><hr>
 

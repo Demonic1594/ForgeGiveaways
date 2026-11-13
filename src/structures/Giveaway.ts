@@ -63,9 +63,6 @@ export interface IGiveaway extends IGiveawayStartOptions {
     previousWinners?: Snowflake[] | null
 }
 
-/**
- * Why a member could not enter a giveaway. `null` means they can.
- */
 /** Hard limits, mostly so values fit the database columns and Discord. */
 export const GiveawayLimits = {
     /** Longest prize, so announcements always fit around it. */
@@ -76,8 +73,16 @@ export const GiveawayLimits = {
     bonus: 1_000_000,
     /** Longest description (embed limit with room for the rest). */
     description: 2000,
+    /**
+     * Latest end time (the last millisecond of the year 9999). Discord can't
+     * show later dates, so such a giveaway could never be posted.
+     */
+    endTimestamp: 253_402_300_799_999,
 } as const
 
+/**
+ * Why a member could not enter a giveaway. `null` means they can.
+ */
 export enum GiveawayDenyReason {
     Bot = "bot",
     Host = "host",
@@ -155,6 +160,11 @@ export class Giveaway implements IGiveaway {
     public entries: Snowflake[]
     /** Entry weights for members who got bonus entries (sparse; absent means 1). */
     public entryWeights?: Record<Snowflake, number> | null
+    /**
+     * Reaction mode only: entries added by hand (`$addGiveawayEntry`). They
+     * have no reaction, so the reaction sync must not treat them as "left".
+     */
+    public manualEntries?: Snowflake[] | null
     /** The randomly selected winners of this giveaway. */
     public winners: Snowflake[]
     /** The previous winners of this giveaway. */
@@ -193,6 +203,7 @@ export class Giveaway implements IGiveaway {
         this.pausedAt = null
         this.entries = []
         this.entryWeights = null
+        this.manualEntries = null
         this.winners = []
         this.previousWinners = null
         this.announcePending = null
@@ -247,6 +258,7 @@ export class Giveaway implements IGiveaway {
         const idx = this.entries.lastIndexOf(userID) // recent joiners leave most often
         if (idx !== -1) this.entries.splice(idx, 1)
         if (this.entryWeights) delete this.entryWeights[userID]
+        if (this.manualEntries?.includes(userID)) this.manualEntries = this.manualEntries.filter((id) => id !== userID)
         return this
     }
 
@@ -400,6 +412,7 @@ export class Giveaway implements IGiveaway {
             bonusEntries: this.bonusEntries ?? [],
             maxEntries: this.maxEntries ?? null,
             display: this.display ?? {},
+            url: this.url(),
         }
     }
 }

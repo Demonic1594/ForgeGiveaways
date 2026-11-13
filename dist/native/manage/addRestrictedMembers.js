@@ -4,7 +4,7 @@ const forgescript_1 = require("@tryforge/forgescript");
 exports.default = new forgescript_1.NativeFunction({
     name: "$addRestrictedMembers",
     version: "1.0.0",
-    description: "Adds restricted members to the current giveaway",
+    description: "Adds restricted members to the giveaway being started or edited",
     aliases: ["$addRestrictedMember"],
     unwrap: true,
     brackets: true,

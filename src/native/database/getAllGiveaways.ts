@@ -29,7 +29,7 @@ export default new NativeFunction({
         array<ArgType.Unknown>()
     ],
     async execute(ctx, [prop, sep]) {
-        const giveaways = await Database.getAll()
+        const giveaways = Database.live(await Database.getAll())
         if (prop) return this.success(giveaways.map((x) => GiveawayProperties[prop](x, sep)).join(sep ?? ", "))
         return this.successJSON(giveaways)
     }
