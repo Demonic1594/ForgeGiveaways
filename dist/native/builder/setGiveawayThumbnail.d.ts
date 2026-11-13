@@ -4,7 +4,7 @@ declare const _default: NativeFunction<[{
     description: string;
     rest: false;
     required: true;
-    type: ArgType.URL;
+    type: ArgType.String;
 }], true>;
 export default _default;
 //# sourceMappingURL=setGiveawayThumbnail.d.ts.map

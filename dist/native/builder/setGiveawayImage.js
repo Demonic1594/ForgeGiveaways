@@ -18,7 +18,7 @@ exports.default = new forgescript_1.NativeFunction({
             description: "The value to set",
             rest: false,
             required: true,
-            type: forgescript_1.ArgType.URL,
+            type: forgescript_1.ArgType.String,
         },
     ],
     execute(ctx, [text]) {
