@@ -1,73 +1,97 @@
-# ReForgeGiveaways 2.0.0
+<div align="center">
 
-A giveaway extension for [ForgeScript](https://github.com/tryforge/ForgeScript): start, end, reroll, edit, pause, resume, extend and cancel giveaways, with role requirements, account and membership age gates, bonus entries, entry caps and fully customizable default messages.
+<img height="150" width="150" src="https://raw.githubusercontent.com/Demonic1594/ReForgeGiveaways/main/assets/ReForgeGiveaways.png" alt="ReForgeGiveaways">
 
-ReForgeGiveaways is a modified fork of [tryforge/ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) by xNickyDev, forked at upstream commit `586fb15` (version 1.1.0). It is licensed under the GNU GPL v3, like the original (see [LICENSE](LICENSE)). Modifications were made in November 2026; [CHANGELOG.md](CHANGELOG.md) lists them.
+# ReForgeGiveaways
+ReForgeGiveaways is a reworked, hardened and feature-rich giveaway extension for ForgeScript. Run giveaways of any length, survive restarts and crashes, keep cheaters out, and customize every message.
 
----
+<a href="https://github.com/Demonic1594/ReForgeGiveaways/"><img src="https://img.shields.io/github/package-json/v/Demonic1594/ReForgeGiveaways/main?label=@tryforge/reforge.giveaways&color=5c16d4" alt="@tryforge/reforge.giveaways"></a>
+<a href="https://github.com/tryforge/ForgeScript/"><img src="https://img.shields.io/github/package-json/v/tryforge/ForgeScript/main?label=@tryforge/forgescript&color=5c16d4" alt="@tryforge/forgescript"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-5c16d4" alt="License: GPL-3.0"></a>
 
-## What's different from upstream 1.1.0
-
-**No duration limit.** Upstream used one `setTimeout` per giveaway. Node can't wait longer than 2^31 - 1 ms (about 24.8 days) and silently turns longer delays into 1 ms, so a 30 day giveaway ended right after it started. This fork uses a single scheduler that re-arms in safe steps, so a giveaway can run for a year or longer. On Postgres and MySQL, times were also stored in 32-bit `INTEGER` columns, which overflow for millisecond timestamps; they are `BIGINT` now.
-
-**Fixed bugs**
-- Winners were drawn only from members already in the bot's cache. Without the `GuildMembers` intent that is usually nobody, so giveaways often ended with no winners. Candidates are now fetched as needed.
-- Two people clicking "Join" at the same time could overwrite each other's entry, and the end timer racing `$endGiveaway` could announce winners twice. Every change to a giveaway now runs under a per-giveaway lock.
-- If the giveaway message was deleted, the giveaway never ended and was retried on every restart. It now ends anyway and logs a warning.
-- `oldGiveaway` in events was a plain object without methods (`structuredClone` drops the class).
-- Removing the reaction of somebody who didn't qualify fired `giveawayEntryRemove` for a user who never entered.
-- Reroll ignored requirements and could not be used on giveaways that ended with no winners. A unique reroll silently fell back to previous winners.
-- The winner draw used `sort(() => Math.random() - 0.5)`, which is biased. It now uses a Fisher-Yates shuffle with a cryptographically secure RNG.
-- A prize containing `@everyone` pinged everyone. Default messages now only ping what they are meant to.
-- Clicking an ended, unknown or not yet loaded giveaway showed "This interaction failed". It now gets a reply.
-- Restoring timers could be skipped if the database connected after the bot was ready.
-- On MySQL, the entries column was `TEXT` (64 KB, about 3,400 entries). It is `LONGTEXT` now.
-
-**Hardening**
-- `$editGiveaway`, `$endGiveaway`, `$rerollGiveaway`, `$deleteGiveaway` and the other management functions refuse to touch a giveaway of another guild. Giveaway IDs are time based and guessable, so a command run in guild A could otherwise end guild B's giveaway. See [Guild scoping](#guild-scoping).
-- Input validation: winners must be at least 1, duration greater than 0, prize not empty, role IDs must be valid IDs or mentions.
-- Winner announcements are split over several messages, so any number of winners fits Discord's 2,000 character limit.
-- A failing event command, Discord API error or database hiccup is logged and does not crash the bot.
-- Pending writes are flushed on `SIGINT`/`SIGTERM`.
-
-**Survives downtime.** Restarts, crashes at any point, Discord outages, database hiccups and host sleep are all recovered from; see [Downtime, restarts and crashes](#downtime-restarts-and-crashes).
-
-**Faster**
-- Active giveaways are kept in memory, so a click on "Join" needs no database read.
-- A rush of entries is written to the database once per second instead of once per click.
-- The live entry counter on the button is refreshed at most every 5 seconds.
-- `messageID` and `guildID` are indexed.
-
-**New features**: pause and resume, extend and shorten, cancel, bonus entries per role, entry caps, minimum account age, minimum time in the server, "any of" required roles, custom description, color, image, thumbnail and ping role, a live entry counter, optional winner DMs, configurable texts, colors, emoji and button, automatic cleanup of old giveaways, adding or removing entries on someone's behalf, per-guild listing, and the `giveawayCancel`, `giveawayPause` and `giveawayResume` events. `giveawayEntryRevoke` now tells you why with `$giveawayDenyReason`.
-
-Existing databases are upgraded in place on first start. Function names and arguments from 1.1.0 keep working; new arguments were only added at the end.
+</div>
 
 ---
 
-## Installation
+## Contents
 
-ReForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) extension.
+1. [Why ReForgeGiveaways](#why-reforgegiveaways)
+2. [Installation](#installation)
+3. [Options](#options)
+4. [Starting Giveaways](#starting-giveaways)
+5. [Functions](#functions)
+6. [Custom Messages](#custom-messages)
+7. [Handling Interactions](#handling-interactions)
+8. [Events](#events)
+9. [Downtime, Restarts and Crashes](#downtime-restarts-and-crashes)
+10. [Abuse Protection](#abuse-protection)
+11. [Switching from ForgeGiveaways](#switching-from-forgegiveaways)
+12. [Notes and Limits](#notes-and-limits)
+13. [Development](#development)
+14. [Credits and License](#credits-and-license)
 
-1. Install it straight from GitHub, together with ForgeDB:
+<h3 align="center">Why ReForgeGiveaways</h3><hr>
+
+- ⏳ **No duration limit.** Run a giveaway for a month, a year or longer. The original ended anything over ~24.8 days right after it started.
+- 🛡️ **Survives downtime.** Restarts, crashes at any point, Discord outages, database hiccups and host sleep are all recovered from.
+- 🚫 **Abuse protection.** Join/leave spam cooldown, requirement and bonus-role re-checks at the draw, no bots, optional host exclusion, no mass pings.
+- 🎲 **Fair draws.** Cryptographically secure, unbiased and tested statistically, with weighted draws for bonus entries.
+- ⚡ **Fast at any size.** 100,000 entrants join, draw and save in well under a second.
+- ✨ **Feature rich.** Pause and resume, extend and shorten, cancel, bonus entries, entry caps, account and member age requirements, an info button with win chances, winner DMs, live entry counter, fully customizable texts and look.
+
+<details>
+<summary><b>Everything fixed compared to ForgeGiveaways 1.1.0</b></summary>
+
+- Durations over ~24.8 days ended immediately (Node timer overflow).
+- Times overflowed 32-bit `INTEGER` columns on Postgres and MySQL; MySQL entries were capped at 64 KB.
+- Winners were drawn only from cached members, so without the `GuildMembers` intent giveaways often had no winners.
+- Concurrent clicks could lose entries, and a timer racing `$endGiveaway` could announce winners twice.
+- A giveaway whose message was deleted never ended.
+- `oldGiveaway` in events lost all of its methods.
+- The reaction handler fired `giveawayEntryRemove` for users who never entered.
+- Reroll ignored requirements, and a unique reroll silently reused previous winners.
+- The winner shuffle was biased.
+- A prize containing `@everyone` pinged everyone.
+- Clicks on ended giveaways showed "This interaction failed".
+- Any command could end or edit another server's giveaway by its ID.
+
+Found while stress-testing the rework, and fixed: joins that cost O(n) each (a mass-join raid could freeze the bot), a queued write that could bring an ended giveaway back to life, removing a winner's entry after the end, and a bonus-role trick that kept extra tickets after dropping the role. The full list is in the [changelog](CHANGELOG.md).
+
+</details>
+
+<h3 align="center">Installation</h3><hr>
+
+> ⚠️ **Warning**\
+> **ReForgeGiveaways** requires the extension [**ForgeDB**](https://docs.botforge.org/p/ForgeDB/) installed in order to operate.
+
+1. Run the following command to install the required `npm` packages:
     ```bash
     npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db
     ```
-    The compiled `dist/` folder is committed, so no build step is needed. To pin a version, use `github:Demonic1594/ReForgeGiveaways#v2.0.0`.
 
-2. Load it in your main file:
+    > ℹ️ **Note**\
+    > The compiled code is committed, so no build step is needed. To pin a version, use `github:Demonic1594/ReForgeGiveaways#v2.0.0`.
+
+2. Here's an example of how your main file should look:
     ```js
     const { ForgeClient } = require("@tryforge/forgescript")
-    const { ForgeDB } = require("@tryforge/forge.db")
     const { ReForgeGiveaways } = require("@tryforge/reforge.giveaways")
+    const { ForgeDB } = require("@tryforge/forge.db")
 
     const giveaways = new ReForgeGiveaways({
-        events: ["giveawayStart", "giveawayEnd"],
-        useDefault: true,
+        events: [
+            "giveawayStart",
+            "giveawayEnd"
+        ],
+        useDefault: true
     })
 
     const client = new ForgeClient({
-        ...options, // the options you currently have
-        extensions: [giveaways, new ForgeDB()],
+        ...options, // The options you currently have
+        extensions: [
+            giveaways,
+            new ForgeDB()
+        ]
     })
 
     client.commands.load("commands")
@@ -76,53 +100,48 @@ ReForgeGiveaways needs the [ForgeDB](https://docs.botforge.org/p/ForgeDB/) exten
     client.login("YourToken")
     ```
 
-    `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded.
+    > ℹ️ **Note**\
+    > `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded.
 
-### Switching from ForgeGiveaways
-
-1. `npm uninstall @tryforge/forge.giveaways`, then install as above.
-2. Change `require("@tryforge/forge.giveaways")` to `require("@tryforge/reforge.giveaways")` and `ForgeGiveaways` to `ReForgeGiveaways` (the old name is not exported, so the two can't be mixed up).
-3. Keep your database: existing giveaways are upgraded in place on first start. Your commands, events and function calls keep working.
-
-The extension registers itself as `reforge.giveaways` (it was `forge.giveaways`), which only matters if another extension listed it by name in `requireExtensions`.
-
-### Options
+<h3 align="center">Options</h3><hr>
 
 | Option | Default | What it does |
 |---|---|---|
 | `events` | `[]` | Giveaway events to listen to |
 | `useDefault` | `true` | Send and update the built-in giveaway messages |
-| `useReactions` | `false` | Enter by reacting instead of clicking a button. Needs the `GuildMessageReactions` intent and the `Message` and `Reaction` partials |
+| `useReactions` | `false` | Enter by reacting instead of clicking a button |
 | `emoji` | `🎉` | Emoji on the button, or the reaction used to enter |
 | `buttonLabel` | `Join` | Button label |
 | `buttonStyle` | `ButtonStyle.Success` | Button style |
 | `showEntryCount` | `true` | Show the live entry count on the button, e.g. "Join (42)" |
 | `showInfoButton` | `true` | Add an "ℹ️" button that privately shows a member their status, tickets, win chance and why they can't enter |
-| `entryCooldown` | `3000` | Minimum ms between two join/leave clicks of one member on one giveaway (anti-spam); `0` disables it |
+| `entryCooldown` | `3000` | Minimum ms between two join/leave clicks of one member on one giveaway; `0` disables it |
 | `dmWinners` | `false` | Send winners a direct message |
 | `colors` | green, yellow, red, grey | Embed colors for `active`, `paused`, `ended`, `cancelled` |
 | `messages` | see `DEFAULT_MESSAGES` | Override any text of the default messages |
 | `entryFlushDelay` | `1000` | Write entry changes at most this often (ms) per giveaway; `0` writes on every click |
 | `messageUpdateDelay` | `5000` | Refresh the entry counter at most this often (ms) |
 | `deleteEndedAfter` | off | Delete ended giveaways this many ms after they ended |
-| `handleSignals` | `true` | Flush pending writes on `SIGINT`/`SIGTERM` |
+| `handleSignals` | `true` | Save pending writes on `SIGINT`/`SIGTERM` |
 
-Text placeholders in `messages`: `{prize}`, `{mentions}`, `{s}` (plural "s"), `{reason}`, `{guild}`, `{link}`, `{tickets}`, `{ping}`, `{entryMethod}`.
+> ⚠️ **Warning**\
+> Reaction mode (`useReactions: true`) needs the `GuildMessageReactions` intent and the `Message` and `Reaction` partials.
+
+Texts in `messages` can use these placeholders: `{prize}`, `{mentions}`, `{s}` (plural "s"), `{reason}`, `{guild}`, `{link}`, `{tickets}`, `{ping}`, `{entryMethod}`.
 
 ```js
 new ReForgeGiveaways({
     dmWinners: true,
     deleteEndedAfter: 30 * 24 * 60 * 60 * 1000, // keep ended giveaways for 30 days
-    messages: { joined: "You're in for **{prize}**! Good luck.{tickets}" },
+    messages: { joined: "You're in for **{prize}**! Good luck.{tickets}" }
 })
 ```
 
----
-
-## Starting giveaways
+<h3 align="center">Starting Giveaways</h3><hr>
 
 Requirement and display functions apply to the `$startGiveaway` or `$editGiveaway` that follows them in the same command.
 
+#### Example
 ```js
 module.exports = {
   name: "gstart",
@@ -132,6 +151,7 @@ module.exports = {
   $setMinimumMemberAge[7d]
   $addBonusEntries[234567890123456789;2]
   $setMaxEntries[500]
+  $excludeGiveawayHost
   $setGiveawayDescription[Thanks for being part of the community!]
   $setGiveawayColor[#5865F2]
   $let[id;$startGiveaway[$channelID;$authorID;Discord Nitro;60d;3]]
@@ -140,11 +160,13 @@ module.exports = {
 }
 ```
 
-Role arguments accept IDs or mentions such as `<@&123...>`; anything else is rejected with an error.
+> ℹ️ **Note**\
+> There is no maximum duration: `30d`, `1y` and longer all work. Role arguments accept IDs or mentions such as `<@&123...>`.
 
-### Functions
+<h3 align="center">Functions</h3><hr>
 
-**Builders** (before `$startGiveaway` or `$editGiveaway`)
+#### Builders
+Use these before `$startGiveaway` or `$editGiveaway`.
 
 | Function | Effect |
 |---|---|
@@ -157,14 +179,18 @@ Role arguments accept IDs or mentions such as `<@&123...>`; anything else is rej
 | `$addBonusEntries[role;amount]` | Members with the role get `amount` extra tickets (bonuses add up) |
 | `$excludeGiveawayHost[exclude?]` | The host can't enter or win |
 | `$setMaxEntries[amount]` | Cap the number of entrants (`0` removes the cap) |
-| `$setGiveawayDescription[text]`, `$setGiveawayColor[color]`, `$setGiveawayImage[url]`, `$setGiveawayThumbnail[url]`, `$setGiveawayPingRole[role]` | Default message look |
+| `$setGiveawayDescription[text]` | Extra text in the giveaway message |
+| `$setGiveawayColor[color]` | Embed color |
+| `$setGiveawayImage[url]` / `$setGiveawayThumbnail[url]` | Embed image and thumbnail |
+| `$setGiveawayPingRole[role]` | Role pinged when the giveaway starts |
 
-**Managing** (all return `true` on success; the optional last `guild ID` argument is explained under [Guild scoping](#guild-scoping))
+#### Managing
+All return `true` on success. The optional last `guild ID` argument is explained under [Guild Scoping](#guild-scoping).
 
 | Function | Effect |
 |---|---|
-| `$startGiveaway[channel;host;prize;duration;winners?]` | Start; returns the giveaway ID. Any duration works, e.g. `1y` |
-| `$endGiveaway[id;guild?]` | End now and draw winners |
+| `$startGiveaway[channel;host;prize;duration;winners?]` | Start a giveaway; returns its ID |
+| `$endGiveaway[id;guild?]` | End now and draw the winners |
 | `$rerollGiveaway[id;unique?;amount?;guild?]` | Draw new winners; `unique` excludes everyone who already won |
 | `$editGiveaway[id;guild;host?;prize?;winners?]` | Change a running giveaway |
 | `$extendGiveaway[id;time;guild?]` / `$shortenGiveaway[id;time;guild?]` | Move the end time |
@@ -174,19 +200,38 @@ Role arguments accept IDs or mentions such as `<@&123...>`; anything else is rej
 | `$deleteGiveaway[id;guild?]` | Delete permanently |
 | `$wipeGiveaways[guild?]` | Delete all giveaways of a guild, or all of them |
 
-**Reading**: `$getGiveaway[id;property?;sep?]`, `$getAllGiveaways[property?;sep?]`, `$getGuildGiveaways[guild;all|active|paused|ended;property?;sep?]`, `$giveawayExists[id]`, and `$giveawayX[id?]` for every field: `ID`, `Prize`, `Duration`, `Timestamp`, `EndTimestamp`, `TimeLeft`, `EndedAt`, `HasEnded`, `IsPaused`, `IsCancelled`, `WinnersCount`, `Winners`, `PreviousWinners`, `Entries`, `EntriesCount`, `TotalTickets`, `MaxEntries`, `HostID`, `GuildID`, `ChannelID`, `MessageID`, `RequiredRoles`, `RequiredRolesMode`, `RestrictedRoles`, `RestrictedMembers`, `MinAccountAge`, `MinMemberAge`, `BonusEntries`, `Description`. Also `$giveawayHasEntered[id;user]`, `$giveawayEntryWeight[id;user]`, `$giveawayWinChance[id;user]` (estimated %), `$giveawayIsWinner[id;user]`, `$giveawayURL[id?]`, and in events `$newGiveaway[property]`, `$oldGiveaway[property]` and `$giveawayDenyReason`.
+#### Reading
 
-The full list with argument details is in [metadata/functions.json](metadata/functions.json).
+| Function | Returns |
+|---|---|
+| `$getGiveaway[id;property?;sep?]` | One giveaway, as JSON or a single property |
+| `$getAllGiveaways[property?;sep?]` | All giveaways |
+| `$getGuildGiveaways[guild;all\|active\|paused\|ended;property?;sep?]` | A guild's giveaways, newest first |
+| `$giveawayExists[id]` | Whether a giveaway exists |
+| `$giveawayHasEntered[id;user]` / `$giveawayEntryWeight[id;user]` | Whether a user entered, and with how many tickets |
+| `$giveawayWinChance[id;user]` | Estimated win chance in percent |
+| `$giveawayIsWinner[id;user]` | Whether a user is a current winner |
+| `$giveawayURL[id?]` | Link to the giveaway message |
+| `$newGiveaway[property]` / `$oldGiveaway[property]` | Giveaway data inside events |
+| `$giveawayDenyReason` | Why an entry was refused, inside `giveawayEntryRevoke` |
 
-### Guild scoping
+Every field also has its own `$giveawayX[id?]` function: `ID`, `Prize`, `Duration`, `Timestamp`, `EndTimestamp`, `TimeLeft`, `EndedAt`, `HasEnded`, `IsPaused`, `IsCancelled`, `WinnersCount`, `Winners`, `PreviousWinners`, `Entries`, `EntriesCount`, `TotalTickets`, `MaxEntries`, `HostID`, `GuildID`, `ChannelID`, `MessageID`, `RequiredRoles`, `RequiredRolesMode`, `RestrictedRoles`, `RestrictedMembers`, `MinAccountAge`, `MinMemberAge`, `BonusEntries`, `Description`.
 
-Management functions only act on giveaways of the guild given as the last argument or, if you leave it out, of the guild the command runs in. In contexts without a guild (giveaway events, `ready`) they are unrestricted. `$editGiveaway` already had a required guild argument; it must now match the giveaway.
+> ℹ️ **Note**\
+> The full list with every argument is in [metadata/functions.json](metadata/functions.json).
 
----
+#### Guild Scoping
+Management functions only act on giveaways of the guild given as the last argument or, if you leave it out, of the guild the command runs in, so one server can never end or edit another server's giveaway. In contexts without a guild (giveaway events, `ready`) they are unrestricted.
 
-## Custom messages
+<h3 align="center">Custom Messages</h3><hr>
 
-Set `useDefault: false` and send your own messages from events. Only **one** `giveawayStart` event is allowed per client, and it **must return the message ID** of the message it sent:
+You can disable the default messages by setting `useDefault: false` in the client options, and override them with custom messages emitted through events. Use the functions above to retrieve information about the current giveaway.
+
+> ⚠️ **Warning**\
+> Only **one** `giveawayStart` event is allowed per client instance!
+
+#### Examples
+When using custom start messages, your event **must return the message ID** of the sent giveaway message. To ensure that only the message ID is returned (and no additional text), use the `$return[]` function.
 
 ```js
 module.exports = {
@@ -220,7 +265,30 @@ module.exports = {
 }
 ```
 
-The entry button's custom ID must be `giveawayEntry` (anything after a `-` is ignored, e.g. `giveawayEntry-1`). Through the entry events you can answer the interaction yourself:
+<h3 align="center">Handling Interactions</h3><hr>
+
+The custom ID for giveaway entry buttons must follow this exact format:
+```
+giveawayEntry
+```
+Anything after a `-` is ignored, so `giveawayEntry-1` works too. The info button uses `giveawayInfo`.
+<sub>*See the `giveawayStart` example above for reference.*</sub>
+
+\
+Through the entry-related events, you can send custom responses directly to the current interaction context.
+
+#### Examples
+```js
+module.exports = {
+  type: "giveawayEntryAdd",
+  code: `
+  $interactionReply[
+    $ephemeral
+    You have joined this giveaway as participant **#$giveawayEntriesCount**!
+  ]
+  `
+}
+```
 
 ```js
 module.exports = {
@@ -228,7 +296,7 @@ module.exports = {
   code: `
   $interactionReply[
     $ephemeral
-    You can't join: $giveawayDenyReason
+    You can't join this giveaway: $giveawayDenyReason
   ]
   `
 }
@@ -236,61 +304,89 @@ module.exports = {
 
 `$giveawayDenyReason` is one of `bot`, `host`, `missingRoles`, `restrictedRole`, `restrictedMember`, `accountTooNew`, `memberTooNew`, `entriesFull`, `ended`, `paused`.
 
-### Events
+<h3 align="center">Events</h3><hr>
 
-`databaseConnect`, `giveawayStart`, `giveawayEnd`, `giveawayReroll`, `giveawayEdit` (also fired by extend/shorten), `giveawayEntryAdd`, `giveawayEntryRemove`, `giveawayEntryRevoke`, `giveawayCancel`, `giveawayPause`, `giveawayResume`.
+| Event | Fired when |
+|---|---|
+| `databaseConnect` | The database has connected |
+| `giveawayStart` | A giveaway has started |
+| `giveawayEnd` | A giveaway has ended and its winners were drawn |
+| `giveawayReroll` | A giveaway was rerolled |
+| `giveawayEdit` | A giveaway was edited, extended or shortened |
+| `giveawayEntryAdd` | Someone entered |
+| `giveawayEntryRemove` | Someone left |
+| `giveawayEntryRevoke` | Someone tried to enter but was refused |
+| `giveawayCancel` | A giveaway was cancelled |
+| `giveawayPause` / `giveawayResume` | A giveaway was paused or resumed |
 
----
-
-## Downtime, restarts and crashes
+<h3 align="center">Downtime, Restarts and Crashes</h3><hr>
 
 Everything about a giveaway lives in the database, so the bot can stop at any moment. On the next start, once both the database and Discord are ready:
 
-| What happened | What the extension does |
+| What happened | What ReForgeGiveaways does |
 |---|---|
 | The bot restarted | Re-arms every running giveaway for its original end time. Paused giveaways stay paused, with the same time left |
-| A giveaway ended while the bot was offline | Draws and announces it right away. Several overdue giveaways are processed one after another, not all at once. The result card shows the scheduled end time, not the time the bot came back |
-| The bot crashed after drawing winners but before announcing them | Announces them and fires `giveawayEnd`, exactly once. Winners are not drawn again |
-| The bot crashed after saving a new giveaway but before posting its message | Posts the message |
-| Reactions were added or removed while offline (reaction mode) | Counts them: new eligible reactors are entered, entries whose reaction is gone are removed. Also re-checked right before every draw |
-| The entry counters went stale while offline | Refreshes the giveaway messages, a few per second |
-| The database is unreachable at boot | Retries with backoff (1 s up to 60 s). Commands give up after 30 s instead of hanging |
-| A guild is in a Discord outage at the end time | Waits and retries every minute instead of ending with no winners. After a day it ends anyway. If the bot was removed from the guild, it ends right away |
+| A giveaway ended while the bot was offline | Draws and announces it right away, one giveaway at a time. The result shows the scheduled end time |
+| The bot crashed after drawing winners but before announcing them | Announces them and fires `giveawayEnd`, exactly once, without drawing again |
+| The bot crashed after saving a new giveaway but before posting it | Posts the message |
+| Reactions changed while offline (reaction mode) | Counts them on restart and again right before every draw |
+| Entry counters went stale while offline | Refreshes the giveaway messages |
+| The database is unreachable at boot | Retries with backoff; commands give up after 30 s instead of hanging |
+| A Discord outage at the end time | Retries every minute instead of ending with no winners; after a day it ends anyway |
 | The bot is disconnected at the end time | Retries every minute until it is back |
-| A database write fails while ending | Nothing changes: the giveaway keeps running, its timer is re-armed, and the error is logged |
-| The host slept or its clock jumped | Every timer re-checks the real time at least every 30 seconds, so an end is never more than 30 s late |
-| A click arrives while the giveaway is busy | The click is acknowledged within Discord's 3 second limit and answered when ready, so users don't see "This interaction failed" |
+| A database write fails while ending | Nothing changes: the giveaway keeps running and its timer is re-armed |
+| The host slept or its clock jumped | Ends are never more than 30 s late |
+| A click arrives while the giveaway is busy | The click is acknowledged in time, so users never see "This interaction failed" |
 
-What can't be recovered: up to one second of entry clicks if the process is killed hard (see `entryFlushDelay`), and button clicks made while the bot was offline, which Discord rejects on its side.
+> ℹ️ **Note**\
+> Two things can't be recovered: up to one second of entry clicks if the process is killed hard (see `entryFlushDelay`), and button clicks made while the bot was offline, which Discord rejects on its side.
 
-## Abuse protection
+<h3 align="center">Abuse Protection</h3><hr>
 
 | Abuse | Protection |
 |---|---|
-| Spamming join/leave to flood events or the database | Per-member cooldown (`entryCooldown`); entry writes are batched and message refreshes debounced anyway |
-| Holding a bonus role only while joining | At the draw, each picked member's tickets are re-checked against their current roles; if they differ, the draw is redone with the real count |
-| Joining with a required role, then dropping it, leaving the server, or getting restricted | Every winner is re-checked against all requirements at the draw |
-| Entering bots or the host (when excluded) through `$addGiveawayEntry` | Bots never win; an excluded host never wins, even if added by hand |
-| Prizes with `@everyone`, role pings or `{placeholders}` | Messages only ever ping the winners; placeholders inside a prize are not expanded |
-| Huge prizes or winner counts | Prize up to 1,024 characters, counts up to 2^31 - 1, bonuses up to 1,000,000; announcements are split to stay within Discord's limits and always mention every winner |
-| Mass joins on big giveaways | Joining is O(1) (100,000 joins take well under a second) |
+| Spamming join/leave | Per-member cooldown (`entryCooldown`); writes are batched and message refreshes debounced |
+| Holding a bonus role only while joining | Picked members' tickets are re-checked at the draw and the draw is redone with the real count |
+| Dropping a required role, leaving or getting restricted after joining | Every winner is re-checked against all requirements at the draw |
+| Adding bots or the host by hand | Bots never win; an excluded host never wins |
+| Prizes with `@everyone`, role pings or `{placeholders}` | Only winners are ever pinged; placeholders inside a prize are not expanded |
+| Huge prizes or winner counts | Prizes up to 1,024 characters, counts up to 2^31 - 1; announcements always fit Discord's limits |
+| Mass joins on big giveaways | Joining takes constant time; 100,000 joins take well under a second |
 | Touching another server's giveaway by ID | Management functions are scoped to their own guild |
 
-Draw fairness is tested statistically (chi-square over thousands of draws), and a seeded fuzzer runs thousands of random concurrent operations with injected database failures, checking that memory, database and timers always agree. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
+<h3 align="center">Switching from ForgeGiveaways</h3><hr>
 
-## Notes and limits
+1. Uninstall the original and install ReForgeGiveaways:
+    ```bash
+    npm uninstall @tryforge/forge.giveaways
+    npm i github:Demonic1594/ReForgeGiveaways
+    ```
+2. Change `require("@tryforge/forge.giveaways")` to `require("@tryforge/reforge.giveaways")`, and `ForgeGiveaways` to `ReForgeGiveaways`.
+3. Keep your database: existing giveaways are upgraded in place on first start. Your commands, events and function calls keep working.
 
-- Active giveaways are cached in memory, which assumes one bot process owns the giveaway table (the normal setup). Don't point two running bots at the same giveaway database.
-- With the default `entryFlushDelay` of one second, a hard kill can lose up to the last second of entry clicks. Normal shutdowns (`SIGINT`/`SIGTERM`) save them. Set it to `0` if that matters more than write volume.
-- Bonus entries count the roles a member has at the time of the draw. A draw is redone, with the corrected ticket count, whenever a picked member's roles have changed since joining; across the whole process this can tilt odds by about one percent in edge cases, never in favor of someone who dropped a bonus role.
+> ℹ️ **Note**\
+> The extension registers itself as `reforge.giveaways`, which only matters if another extension lists it by name in `requireExtensions`.
+
+<h3 align="center">Notes and Limits</h3><hr>
+
+- Running giveaways are kept in memory, which assumes one bot process owns the giveaway table (the normal setup). Don't point two running bots at the same giveaway database.
+- Bonus entries count the roles a member has at the time of the draw.
 - Entries of an ended giveaway can't be changed; they are the record the winners were drawn from.
 - MongoDB support follows the original schema but has not been tested against a live MongoDB server.
 
-## Development
+<h3 align="center">Development</h3><hr>
 
 ```bash
 npm install
 npm run build      # compile TypeScript to dist/
-npm test           # build, then run unit and integration tests (SQLite)
+npm test           # build, then run all tests (SQLite)
 npm run docgen     # regenerate metadata/*.json
 ```
+
+The test suite covers the scheduler, locking, statistical fairness, multi-process restart and crash scenarios, and a seeded fuzzer that runs thousands of random concurrent operations with injected database failures. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
+
+<h3 align="center">Credits and License</h3><hr>
+
+ReForgeGiveaways is a modified fork of [ForgeGiveaways](https://github.com/tryforge/ForgeGiveaways) by xNickyDev, forked at version 1.1.0 (commit `586fb15`). Modifications were made in November 2026 and are listed in the [changelog](CHANGELOG.md).
+
+Licensed under the [GNU GPL v3](LICENSE), like the original.
