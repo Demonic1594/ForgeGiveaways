@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2.2.1 (November 2026)
+
+Tag [`v2.2.1`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.2.1) · [all changes since 2.2.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.2.0...v2.2.1)
+
+A bug-fix release. No database changes; install over 2.2.0.
 
 ### Fixed
 - `$setGiveawayImage` and `$setGiveawayThumbnail` did not refuse bad links, despite 2.2.0. Their argument had ForgeScript's `URL` type, which turns anything that is not an `https` link into a Discord emoji link (`https://cdn.discordapp.com/emojis/undefined.png...`) before the function runs, so the 2.2.0 check never saw it: an `ftp://` or `javascript:` link was stored as a broken image. They now take the link as text and refuse anything but an http(s) link of at most 2048 characters. Found while documenting the extension for the BotForge knowledge base.
