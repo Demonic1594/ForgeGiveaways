@@ -2,6 +2,7 @@ import { ArgType, NativeFunction } from "@tryforge/forgescript"
 import { BaseChannel, GuildBasedChannel } from "discord.js"
 import { ReForgeGiveaways } from "../.."
 import { GiveawayLimits } from "../../structures"
+import { canStartIn } from "../../functions/scope"
 
 export default new NativeFunction({
     name: "$startGiveaway",
@@ -54,6 +55,7 @@ export default new NativeFunction({
         if (prize.trim().length > GiveawayLimits.prize) return this.customError(`Prize must be at most ${GiveawayLimits.prize} characters`)
         if (!(duration > 0)) return this.customError("Duration must be greater than 0")
         if (!prize.trim()) return this.customError("Prize must not be empty")
+        if (!canStartIn(ctx, (channel as GuildBasedChannel).guildId)) return this.customError("Giveaways can only be started in channels of the current server")
 
         const client = ctx.client.getExtension(ReForgeGiveaways, true)
         const b = ctx.giveawayBuilder

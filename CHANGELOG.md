@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Security
+- `$startGiveaway` refuses to post in a channel of another server than the one the command runs in.
+
 ## 2.1.0 (November 2026)
 
 Tag [`v2.1.0`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.1.0) · [all changes since 2.0.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/e07ec8f...v2.1.0) · [upgrade notes](README.md#from-200-to-210)

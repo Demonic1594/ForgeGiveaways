@@ -425,7 +425,7 @@ New in 2.1.0: `$rerollGiveawayWinner`, `$clearGiveawayRequirements`, `$clearBonu
 - In reaction mode, entries added with `$addGiveawayEntry` are kept even though they have no reaction.
 - Giveaways must end before the year 10000, the latest date Discord can display.
 - SQLite and PostgreSQL are tested. MySQL and MongoDB follow the same code paths but have not been tested against a live server.
-- `$startGiveaway` posts in whatever channel it is given. If the channel comes from user input, check that it belongs to the current server (for example `$if[$channelGuildID[$get[channel]]!=$guildID;...]`).
+- `$startGiveaway` only posts in channels of the server the command runs in. Contexts without a server (giveaway events, `ready`, direct messages) can pick any channel, so keep commands that take a channel from user input in a server.
 
 <h3 align="center">Development</h3><hr>
 
