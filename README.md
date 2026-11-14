@@ -63,12 +63,14 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 <h3 align="center">Installation</h3><hr>
 
 > ⚠️ **Warning**\
-> **ReForgeGiveaways** requires the extension [**ForgeDB**](https://docs.botforge.org/p/ForgeDB/) installed in order to operate.
+> **ReForgeGiveaways** stores its giveaways with a database extension: [**ReForgeDB**](https://github.com/Demonic1594/ReForgeDB) (recommended) or [**ForgeDB**](https://docs.botforge.org/p/ForgeDB/). Add one of them to your extensions.
 
 1. Run the following command to install the required `npm` packages:
     ```bash
-    npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db
+    npm i github:Demonic1594/ReForgeGiveaways github:Demonic1594/ReForgeDB
     ```
+
+    With ForgeDB instead: `npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db`.
 
     > ℹ️ **Note**\
     > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.2.1`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
@@ -77,7 +79,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```js
     const { ForgeClient } = require("@tryforge/forgescript")
     const { ReForgeGiveaways } = require("@tryforge/reforge.giveaways")
-    const { ForgeDB } = require("@tryforge/forge.db")
+    const { ReForgeDB } = require("@tryforge/reforge.db") // or: const { ForgeDB } = require("@tryforge/forge.db")
 
     const giveaways = new ReForgeGiveaways({
         events: [
@@ -91,7 +93,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
         ...options, // The options you currently have
         extensions: [
             giveaways,
-            new ForgeDB()
+            new ReForgeDB() // or: new ForgeDB()
         ]
     })
 
@@ -102,7 +104,13 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded.
+    > `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded. npm installs `@tryforge/forge.db` with ReForgeGiveaways even when you use ReForgeDB; it is not loaded unless you add `new ForgeDB()`.
+
+#### ReForgeDB or ForgeDB
+
+ReForgeGiveaways uses whichever of the two is in your extensions, with the connection settings you gave it, and keeps its giveaways in their own table (`giveaways.db` on SQLite). If both are there, it uses ReForgeDB and says so in a warning. If neither is, the bot stops at start-up with a message that names both.
+
+With ForgeDB, the bot shows a reminder once when it starts: ReForgeDB uses your existing ForgeDB data as it is, and with other ReForge extensions it means fewer complications, better compatibility and a better experience ([how to switch](https://github.com/Demonic1594/ReForgeDB#switching-from-forgedb)). The reminder is shown once per process, also when several ReForge extensions notice ForgeDB, and `logLevel: "warn"` hides it.
 
 <h3 align="center">Options</h3><hr>
 
@@ -124,6 +132,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 | `messageUpdateDelay` | `5000` | Refresh the entry counter at most this often (ms) |
 | `deleteEndedAfter` | off | Delete ended giveaways this many ms after they ended |
 | `handleSignals` | `true` | Save pending writes on `SIGINT`/`SIGTERM` |
+| `logLevel` | `info` | `silent`, `error`, `warn`, `info`, `debug` (every giveaway action and entry write) or `trace` (also timers and message refreshes); also the `REFORGEGIVEAWAYS_LOG_LEVEL` environment variable |
 
 > ⚠️ **Warning**\
 > Reaction mode (`useReactions: true`) needs the `GuildMessageReactions` intent and the `Message` and `Reaction` partials.
@@ -404,8 +413,15 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 Install the new release over the old one; there is nothing to migrate by hand. On the first start the database is upgraded in place, and only nullable columns are ever added, so your giveaways and entries are kept.
 
 ```bash
-npm i github:Demonic1594/ReForgeGiveaways#v2.2.1
+npm i github:Demonic1594/ReForgeGiveaways#v3.0.0
 ```
+
+#### From 2.2.1 to 3.0.0
+No database changes. ReForgeGiveaways now works with ReForgeDB as well as ForgeDB; with ForgeDB nothing changes for your code. What may need attention:
+- `GiveawaysDatabaseManager` is no longer exported: its base class depends on the database extension in use, which is only known when the bot starts. `Database` is still exported, with the same static methods, but no longer extends `DataBaseManager`.
+- The extension no longer lists `forge.db` in `requireExtensions`; it checks for ReForgeDB or ForgeDB itself, before it starts.
+- Everything it prints goes through `logLevel` (default `info`, as before). Lines start with `[ReForgeGiveaways]` as before.
+- CI tests Node.js 22 and 24 (was 20 and 22). `package.json` still allows Node.js 18.17 and newer, but versions below 22 are no longer tested; ForgeScript 2.8 itself needs Node.js 22.
 
 #### From 2.2.0 to 2.2.1
 No database changes. `$setGiveawayImage` and `$setGiveawayThumbnail` now refuse a link that is not http(s) (or is longer than 2048 characters) with an error; before, it was silently stored as a broken image.

@@ -3,4 +3,6 @@ export * from "./KeyedMutex";
 export * from "./random";
 export * from "./text";
 export * from "./emoji";
+export * from "./logger";
+export * from "./databaseExtension";
 //# sourceMappingURL=index.d.ts.map

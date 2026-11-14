@@ -137,8 +137,13 @@ const phases = {
 
 ;(async () => {
     const extra = phase === "reactions" ? { useReactions: true } : phase.startsWith("custom") ? { useDefault: false, events: ["giveawayStart"] } : {}
+    // A real bot's gateway connection keeps the process alive while timers
+    // (all unref'd) run out; this test process never logs in, so hold it open
+    // until the phase is done instead of relying on a database extension's timer.
+    const keepAlive = setInterval(() => {}, 1000)
     const h = await boot(dir, { autoMembers: true, ...extra })
     out(await phases[phase](h))
+    clearInterval(keepAlive)
     await h.manager.destroy()
     process.exit(0)
 })().catch((e) => { console.error(e); process.exit(1) })

@@ -1,7 +1,8 @@
-import { GiveawaysDatabaseManager } from "../managers/GiveawaysDatabaseManager"
 import type { IGiveawayEvents } from "../handlers/GiveawaysEventHandler"
 import { TypedEmitter } from "tiny-typed-emitter"
-import { TransformEvents } from "@tryforge/forge.db"
+import type { TransformEvents } from "../types"
+import { connectThrough, DatabaseExtensionName, loadDataBaseManager } from "../utils/databaseExtension"
+import { ReForgeGiveawaysLogger as log } from "../utils/logger"
 import { Snowflake } from "discord.js"
 import { DataSource, EntitySchema, In, Repository } from "typeorm"
 import { Giveaway, IGiveaway, MongoGiveaway } from "./Giveaway"
@@ -39,7 +40,7 @@ const schemas = {
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-export class Database extends GiveawaysDatabaseManager {
+export class Database {
     public database = "giveaways.db"
 
     public entityManager = {
@@ -62,9 +63,15 @@ export class Database extends GiveawaysDatabaseManager {
     /** Message id to giveaway id, for active giveaways. */
     private static readonly byMessage = new Map<Snowflake, Snowflake>()
 
-    constructor(private readonly emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>) {
-        super()
-        this.db = this.getDB()
+    /**
+     * Connects through the `DataBaseManager` of the database extension the bot
+     * uses (ReForgeDB or ForgeDB), with the settings given to it.
+     */
+    constructor(
+        private readonly emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>,
+        public readonly extension: DatabaseExtensionName = "reforge.db"
+    ) {
+        this.db = connectThrough(loadDataBaseManager(extension), this.database, this.entityManager)
     }
 
     public async init() {
@@ -73,6 +80,7 @@ export class Database extends GiveawaysDatabaseManager {
         Database.driver = driverOf(Database.db.options.type)
         Database.schema = schemas[Database.driver]
         Database.entities = { Giveaway: Database.driver === "mongodb" ? MongoGiveaway : Giveaway }
+        log.debug(`database connected through ${this.extension} (${Database.db.options.type})`)
         await Database.loadActive()
         Database.emitter.emit("databaseConnect")
     }

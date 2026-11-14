@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Database = void 0;
-const GiveawaysDatabaseManager_1 = require("../managers/GiveawaysDatabaseManager");
+const databaseExtension_1 = require("../utils/databaseExtension");
+const logger_1 = require("../utils/logger");
 const typeorm_1 = require("typeorm");
 const Giveaway_1 = require("./Giveaway");
 const schema_1 = require("./schema");
@@ -32,8 +33,9 @@ const schemas = {
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
+class Database {
     emitter;
+    extension;
     database = "giveaways.db";
     entityManager = {
         sqlite: [schemas.sqlite],
@@ -51,10 +53,14 @@ class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
     static active = new Map();
     /** Message id to giveaway id, for active giveaways. */
     static byMessage = new Map();
-    constructor(emitter) {
-        super();
+    /**
+     * Connects through the `DataBaseManager` of the database extension the bot
+     * uses (ReForgeDB or ForgeDB), with the settings given to it.
+     */
+    constructor(emitter, extension = "reforge.db") {
         this.emitter = emitter;
-        this.db = this.getDB();
+        this.extension = extension;
+        this.db = (0, databaseExtension_1.connectThrough)((0, databaseExtension_1.loadDataBaseManager)(extension), this.database, this.entityManager);
     }
     async init() {
         Database.emitter = this.emitter;
@@ -62,6 +68,7 @@ class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
         Database.driver = driverOf(Database.db.options.type);
         Database.schema = schemas[Database.driver];
         Database.entities = { Giveaway: Database.driver === "mongodb" ? Giveaway_1.MongoGiveaway : Giveaway_1.Giveaway };
+        logger_1.ReForgeGiveawaysLogger.debug(`database connected through ${this.extension} (${Database.db.options.type})`);
         await Database.loadActive();
         Database.emitter.emit("databaseConnect");
     }

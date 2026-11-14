@@ -14,4 +14,8 @@ export interface IExtendedRunnable extends IRunnable {
     obj: ExtendedSendable;
     states?: ExtendedStates;
 }
+/** Listener signatures of an event map (what ForgeDB exported as TransformEvents). */
+export type TransformEvents<T> = {
+    [P in keyof T]: T[P] extends any[] ? (...args: T[P]) => any : never;
+};
 //# sourceMappingURL=types.d.ts.map

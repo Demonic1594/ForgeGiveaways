@@ -3,8 +3,10 @@ import { ButtonStyle, ColorResolvable } from "discord.js";
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers";
 import { IGiveawayEvents } from "./handlers";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { TransformEvents } from "@tryforge/forge.db";
+import type { TransformEvents } from "./types";
 import { GiveawayMessages } from "./structures";
+import { DatabaseExtensionName } from "./utils/databaseExtension";
+import { LogLevel } from "./utils/logger";
 export interface IReForgeGiveawaysOptions {
     /** The giveaway events to use. */
     events?: Array<keyof IGiveawayEvents>;
@@ -50,6 +52,13 @@ export interface IReForgeGiveawaysOptions {
     deleteEndedAfter?: number | null;
     /** Flush pending writes on SIGINT/SIGTERM before the process exits. Defaults to `true`. */
     handleSignals?: boolean;
+    /**
+     * What is written to the console: `silent`, `error`, `warn`, `info`
+     * (default), `debug` (every giveaway action and entry write) or `trace`
+     * (also timers and message refreshes). The `REFORGEGIVEAWAYS_LOG_LEVEL`
+     * environment variable sets it when this is not given.
+     */
+    logLevel?: LogLevel;
 }
 export declare class ReForgeGiveaways extends ForgeExtension {
     #private;
@@ -57,11 +66,21 @@ export declare class ReForgeGiveaways extends ForgeExtension {
     name: string;
     description: string;
     version: string;
-    requireExtensions: string[];
+    /**
+     * The database extension the giveaways are stored with: ReForgeDB
+     * (`reforge.db`, recommended) or ForgeDB (`forge.db`). Checked before the
+     * extension starts, since ForgeScript's `requireExtensions` can only ask for one.
+     */
+    databaseExtension: DatabaseExtensionName | null;
     emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>;
     giveawaysManager: GiveawaysManager;
     commands: GiveawaysCommandManager;
     constructor(options?: IReForgeGiveawaysOptions);
+    /**
+     * Picks the database extension before the extension starts, where an
+     * error still stops the bot (ForgeScript only logs errors thrown by init).
+     */
+    protected validateAndInit(client: ForgeClient): void;
     init(client: ForgeClient): Promise<void>;
 }
 export * from "./handlers";

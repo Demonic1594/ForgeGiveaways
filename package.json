@@ -1,6 +1,6 @@
 {
   "name": "@tryforge/reforge.giveaways",
-  "version": "2.2.1",
+  "version": "3.0.0",
   "description": "ReForgeGiveaways: a reworked giveaway extension for ForgeScript with no duration limit, crash and downtime recovery, abuse protection, pause/resume, bonus entries, requirements and customizable messages. Fork of tryforge/ForgeGiveaways.",
   "main": "dist/index.js",
   "scripts": {
@@ -29,6 +29,7 @@
   "devDependencies": {
     "@tryforge/forge.db": "^2.1.1",
     "@tryforge/forgescript": "^2.7.1",
+    "@tryforge/reforge.db": "github:Demonic1594/ReForgeDB#6c9808a45ea1ada5741dfb9db602548da0b4c4f7",
     "@types/node": "^22.20.5",
     "better-sqlite3": "^12.11.1",
     "discord.js": "^14.27.0",
@@ -40,8 +41,8 @@
     "typeorm": "^0.3.31"
   },
   "peerDependencies": {
-    "@tryforge/forgescript": ">=2.5.0",
     "@tryforge/forge.db": "^2.1.0",
+    "@tryforge/forgescript": ">=2.5.0",
     "discord.js": "^14.25.0"
   },
   "files": [

@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GiveawaysReactionHandler = void 0;
-const forgescript_1 = require("@tryforge/forgescript");
+const logger_1 = require("../utils/logger");
 const discord_js_1 = require("discord.js");
 const __1 = require("..");
 const structures_1 = require("../structures");
@@ -20,7 +20,7 @@ class GiveawaysReactionHandler {
         this.client = client;
         const partials = client.options.partials ?? [];
         if (!partials.includes(discord_js_1.Partials.Message) || !partials.includes(discord_js_1.Partials.Reaction)) {
-            forgescript_1.Logger.warn(`[ReForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`);
+            logger_1.ReForgeGiveawaysLogger.warn(`Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`);
         }
         client.on("messageReactionAdd", (r, u) => void this.add(r, u).catch(noop_1.default));
         client.on("messageReactionRemove", (r, u) => void this.remove(r, u).catch(noop_1.default));

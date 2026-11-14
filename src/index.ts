@@ -1,13 +1,15 @@
-import { EventManager, ForgeClient, ForgeExtension, Logger } from "@tryforge/forgescript"
+import { EventManager, ForgeClient, ForgeExtension } from "@tryforge/forgescript"
 import { ButtonStyle, ColorResolvable, resolveColor } from "discord.js"
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers"
 import { GiveawaysInteractionHandler, GiveawaysReactionHandler, IGiveawayEvents } from "./handlers"
 import { TypedEmitter } from "tiny-typed-emitter"
-import { TransformEvents } from "@tryforge/forge.db"
+import type { TransformEvents } from "./types"
 import { Database, DEFAULT_MESSAGES, GiveawayMessages } from "./structures"
 import { GiveawaysErrorType } from "./functions/error"
 import noop from "./functions/noop"
 import { shardIdFor } from "./utils"
+import { DatabaseExtensionName, findDatabaseExtension, remindToSwitch } from "./utils/databaseExtension"
+import { isLogLevel, LOG_LEVELS, LogLevel, ReForgeGiveawaysLogger as log } from "./utils/logger"
 import { description, version } from "../package.json"
 
 /** Longest the shutdown handler waits for pending writes before letting the process stop. */
@@ -76,13 +78,26 @@ export interface IReForgeGiveawaysOptions {
 
     /** Flush pending writes on SIGINT/SIGTERM before the process exits. Defaults to `true`. */
     handleSignals?: boolean
+
+    /**
+     * What is written to the console: `silent`, `error`, `warn`, `info`
+     * (default), `debug` (every giveaway action and entry write) or `trace`
+     * (also timers and message refreshes). The `REFORGEGIVEAWAYS_LOG_LEVEL`
+     * environment variable sets it when this is not given.
+     */
+    logLevel?: LogLevel
 }
 
 export class ReForgeGiveaways extends ForgeExtension {
     name = "reforge.giveaways"
     description = description
     version = version
-    requireExtensions = ["forge.db"]
+    /**
+     * The database extension the giveaways are stored with: ReForgeDB
+     * (`reforge.db`, recommended) or ForgeDB (`forge.db`). Checked before the
+     * extension starts, since ForgeScript's `requireExtensions` can only ask for one.
+     */
+    public databaseExtension: DatabaseExtensionName | null = null
 
     public emitter = new TypedEmitter<TransformEvents<IGiveawayEvents>>()
 
@@ -92,6 +107,10 @@ export class ReForgeGiveaways extends ForgeExtension {
     public constructor(public readonly options: IReForgeGiveawaysOptions = {}) {
         super()
         const o = this.options
+        if (o.logLevel !== undefined) {
+            if (!isLogLevel(o.logLevel)) throw new Error(`[ReForgeGiveaways] "logLevel" must be one of ${LOG_LEVELS.join(", ")}, got ${JSON.stringify(o.logLevel)}`)
+            log.level = o.logLevel
+        }
         o.useDefault ??= true
         o.useReactions ??= false
         o.emoji ||= "🎉"
@@ -118,6 +137,26 @@ export class ReForgeGiveaways extends ForgeExtension {
         o.messages = { ...DEFAULT_MESSAGES, ...Object.fromEntries(texts) }
     }
 
+    /**
+     * Picks the database extension before the extension starts, where an
+     * error still stops the bot (ForgeScript only logs errors thrown by init).
+     */
+    protected override validateAndInit(client: ForgeClient): void {
+        const found = findDatabaseExtension(client)
+        if (!found) {
+            throw new Error(
+                "[ReForgeGiveaways] needs a database extension to store giveaways: add new ReForgeDB() (recommended, npm i github:Demonic1594/ReForgeDB) or new ForgeDB() (npm i @tryforge/forge.db) to your extensions."
+            )
+        }
+        this.databaseExtension = found
+        const names = (client.options.extensions ?? []).map((x) => x.name)
+        if (found === "reforge.db" && names.includes("forge.db")) {
+            log.warn("Both ReForgeDB and ForgeDB are in your extensions; giveaways are stored with ReForgeDB. Remove ForgeDB once nothing else needs it.")
+        }
+        if (found === "forge.db") remindToSwitch()
+        super.validateAndInit(client)
+    }
+
     public async init(client: ForgeClient) {
         this.commands = new GiveawaysCommandManager(client)
 
@@ -127,7 +166,7 @@ export class ReForgeGiveaways extends ForgeExtension {
         if (this.options.useReactions) {
             new GiveawaysReactionHandler(client)
             if (!client.options.intents.has("GuildMessageReactions")) {
-                Logger.warn(`[ReForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`)
+                log.warn(`Intent "GuildMessageReactions" must be defined for reactions to function`)
             }
         } else {
             new GiveawaysInteractionHandler(client)
@@ -148,7 +187,9 @@ export class ReForgeGiveaways extends ForgeExtension {
         this.giveawaysManager = new GiveawaysManager(client, this)
         if (this.options.handleSignals) this.#handleSignals()
 
-        await this.#connect()
+        this.databaseExtension ??= findDatabaseExtension(client)
+        if (!this.databaseExtension) throw new Error("[ReForgeGiveaways] needs ReForgeDB or ForgeDB in your extensions")
+        await this.#connect(this.databaseExtension)
         this.giveawaysManager._onDatabaseReady()
     }
 
@@ -157,15 +198,15 @@ export class ReForgeGiveaways extends ForgeExtension {
      * unreachable at boot, instead of failing once and leaving every giveaway
      * function waiting forever.
      */
-    async #connect() {
+    async #connect(extension: DatabaseExtensionName) {
         for (let attempt = 0; ; attempt++) {
             try {
-                await new Database(this.emitter).init()
-                if (attempt) Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`)
+                await new Database(this.emitter, extension).init()
+                if (attempt) log.info(`Database connected after ${attempt + 1} attempts`)
                 return
             } catch (e) {
                 const wait = Math.min(1000 * 2 ** attempt, 60_000)
-                Logger.error(`[ReForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
+                log.error(`Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
                 await new Promise((r) => setTimeout(r, wait))
             }
         }

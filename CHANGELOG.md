@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0 (November 2026)
+
+Tag [`v3.0.0`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v3.0.0) · [all changes since 2.2.1](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.2.1...v3.0.0) · [upgrade notes](README.md#from-221-to-300)
+
+Works with ReForgeDB as well as ForgeDB. No database changes; install over 2.2.1.
+
+### Fixed
+- **ReForgeGiveaways did not load with ReForgeDB**: "Extension `reforge.giveaways` requires the next extension: `forge.db` loaded to work". It asked ForgeScript for an extension named `forge.db` and built its database class on `@tryforge/forge.db`. It now uses whichever of ReForgeDB (`reforge.db`) and ForgeDB (`forge.db`) the bot loaded, ReForgeDB when both are there, and stops at start-up with a message naming both when neither is.
+- The crash-recovery tests relied on ForgeDB keeping the process alive with a timer of its own; with ReForgeDB (whose timers are all unref'd) the test process ended before the repaired giveaway was read. The test fixture now holds the process open itself, as a bot's gateway connection does.
+
+### Added
+- With ForgeDB, a reminder once per process to switch to ReForgeDB (existing data is used as it is; fewer complications, better compatibility and a better experience with other ReForge extensions). Shared with the other ReForge extensions, so it is shown once even when several notice ForgeDB.
+- `logLevel` option (`silent`, `error`, `warn`, `info`, `debug`, `trace`) and the `REFORGEGIVEAWAYS_LOG_LEVEL` environment variable. `debug` shows every giveaway action (start, end, reroll, pause, resume, cancel, entries) and every entry write with its duration; `trace` also timers and message refreshes.
+- `ReForgeGiveawaysLogger`, `findDatabaseExtension()`, `loadDataBaseManager()` and `remindToSwitch()` are exported.
+
+### Breaking
+- `GiveawaysDatabaseManager` is no longer exported, and `Database` no longer extends `DataBaseManager` (its static methods are unchanged).
+- `requireExtensions` is empty; the database extension is checked by the extension itself.
+
+### Tests and CI
+- `test/database.test.js`: ReForgeDB only, ForgeDB only (reminder once, hidden by `logLevel: "warn"`), both (ReForgeDB used, a warning), neither (stops at start-up), `logLevel`. 5 of its 6 tests fail on 2.2.1; the sixth checks that `warn` hides the reminder, which 2.2.1 never shows.
+- CI runs every test file with ForgeDB and with ReForgeDB (pinned to a commit in `package.json`), on Node.js 22 and 24, the PostgreSQL files with both, and ForgeScript 2.5.0. 77 tests (71 before).
+
 ## 2.2.1 (November 2026)
 
 Tag [`v2.2.1`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.2.1) · [all changes since 2.2.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.2.0...v2.2.1)

@@ -1,14 +1,26 @@
 "use strict"
 /*
- * Boots a real ForgeClient (never logs in) with ForgeDB on better-sqlite3 and
- * ReForgeGiveaways, and swaps the three Discord lookups the manager makes for
+ * Boots a real ForgeClient (never logs in) with a database extension on
+ * better-sqlite3 and ReForgeGiveaways, and swaps the three Discord lookups the manager makes for
  * in-memory fakes. Everything else (scheduler, locking, persistence, the
  * renderer, winner drawing) is the real code.
  */
 const path = require("path")
 const { SnowflakeUtil } = require("discord.js")
 const { ForgeClient } = require("@tryforge/forgescript")
-const { ForgeDB } = require("@tryforge/forge.db")
+/*
+ * The database extension: ForgeDB by default, ReForgeDB with
+ * GIVEAWAYS_TEST_EXTENSION=reforge.db (CI runs every test file with both).
+ */
+const EXTENSION = process.env.GIVEAWAYS_TEST_EXTENSION === "reforge.db" ? "reforge.db" : "forge.db"
+const databaseExtension = (options) => {
+    if (EXTENSION === "reforge.db") {
+        const { ReForgeDB } = require("@tryforge/reforge.db")
+        return new ReForgeDB({ logLevel: "warn", cooldownSweepInterval: 0, ...options })
+    }
+    const { ForgeDB } = require("@tryforge/forge.db")
+    return new ForgeDB(options)
+}
 const { ReForgeGiveaways } = require("../..")
 
 const DAY = 864e5
@@ -31,7 +43,7 @@ async function boot(dir, options = {}) {
     giveaways.emitter.emit = (name, ...args) => { emitted.push({ name, args }); return realEmit(name, ...args) }
     const client = new ForgeClient({
         intents: ["Guilds"],
-        extensions: [giveaways, new ForgeDB(database(dir))],
+        extensions: [giveaways, databaseExtension(database(dir))],
     })
     const manager = giveaways.giveawaysManager
     // Never logs in; pretend to be connected so deadlines are not postponed.
@@ -101,4 +113,4 @@ async function boot(dir, options = {}) {
     return { emitted, client, giveaways, manager, sent, deleted, messages, addMember, members, guild, channel, dir, setGuildState: (v) => { guildState = v } }
 }
 
-module.exports = { boot, snow, DAY, dbFile: (dir) => path.join(dir, "giveaways.db") }
+module.exports = { boot, snow, DAY, EXTENSION, databaseExtension, dbFile: (dir) => path.join(dir, "giveaways.db") }

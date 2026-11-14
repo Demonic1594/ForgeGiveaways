@@ -1,7 +1,7 @@
-import { GiveawaysDatabaseManager } from "../managers/GiveawaysDatabaseManager";
 import type { IGiveawayEvents } from "../handlers/GiveawaysEventHandler";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { TransformEvents } from "@tryforge/forge.db";
+import type { TransformEvents } from "../types";
+import { DatabaseExtensionName } from "../utils/databaseExtension";
 import { Snowflake } from "discord.js";
 import { EntitySchema } from "typeorm";
 import { Giveaway, IGiveaway, MongoGiveaway } from "./Giveaway";
@@ -16,8 +16,9 @@ export type IGiveawayFindOptions = Partial<Omit<IGiveaway, "entries" | "winners"
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-export declare class Database extends GiveawaysDatabaseManager {
+export declare class Database {
     private readonly emitter;
+    readonly extension: DatabaseExtensionName;
     database: string;
     entityManager: {
         sqlite: EntitySchema<Giveaway>[];
@@ -37,7 +38,11 @@ export declare class Database extends GiveawaysDatabaseManager {
     private static readonly active;
     /** Message id to giveaway id, for active giveaways. */
     private static readonly byMessage;
-    constructor(emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>);
+    /**
+     * Connects through the `DataBaseManager` of the database extension the bot
+     * uses (ReForgeDB or ForgeDB), with the settings given to it.
+     */
+    constructor(emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>, extension?: DatabaseExtensionName);
     init(): Promise<void>;
     /** Whether the database finished connecting. */
     static get ready(): boolean;
