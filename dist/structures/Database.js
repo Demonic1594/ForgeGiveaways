@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Database = void 0;
-const GiveawaysDatabaseManager_1 = require("../managers/GiveawaysDatabaseManager");
 const typeorm_1 = require("typeorm");
 const Giveaway_1 = require("./Giveaway");
 const schema_1 = require("./schema");
@@ -32,8 +31,9 @@ const schemas = {
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
+class Database {
     emitter;
+    /** The database (SQLite: the file) giveaways are stored in. */
     database = "giveaways.db";
     entityManager = {
         sqlite: [schemas.sqlite],
@@ -51,10 +51,22 @@ class Database extends GiveawaysDatabaseManager_1.GiveawaysDatabaseManager {
     static active = new Map();
     /** Message id to giveaway id, for active giveaways. */
     static byMessage = new Map();
-    constructor(emitter) {
-        super();
+    /**
+     * @param manager The `DataBaseManager` class of the database extension the
+     * bot loaded (ReForgeDB or ForgeDB; see `resolveDatabaseManager`). Its
+     * connection settings are used, with a database of its own for giveaways.
+     */
+    constructor(emitter, manager) {
         this.emitter = emitter;
-        this.db = this.getDB();
+        const { database, entityManager } = this;
+        class GiveawaysConnection extends manager {
+            database = database;
+            entityManager = entityManager;
+            open() {
+                return this.getDB();
+            }
+        }
+        this.db = new GiveawaysConnection().open();
     }
     async init() {
         Database.emitter = this.emitter;

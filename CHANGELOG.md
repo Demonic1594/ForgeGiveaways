@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.3.0 (November 2026)
+
+Tag [`v2.3.0`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.3.0) · [all changes since 2.2.1](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.2.1...v2.3.0) · [upgrade notes](README.md#from-221-to-230)
+
+Works with [ReForgeDB](https://github.com/Demonic1594/ReForgeDB) as well as ForgeDB. No database changes; install over 2.2.1.
+
+### Added
+- ReForgeDB support. Giveaways use whichever of ReForgeDB and ForgeDB the bot loaded, ReForgeDB when both are (with a warning to keep only one, since both add the same functions). Before, the extension required one named `forge.db` and refused to start with ReForgeDB.
+- `TransformEvents`, `resolveDatabaseManager`, `loadedDatabaseExtensions` and `DATABASE_EXTENSIONS` are exported.
+
+### Changed
+- ReForgeGiveaways no longer imports a database package. It takes the `DataBaseManager` class from the extension the bot loaded (`client.db`, or the package's exports when both are loaded), so it always shares that extension's connection settings and TypeORM copy.
+- `@tryforge/forge.db` and `@tryforge/reforge.db` are optional peer dependencies. Before, npm installed the original ForgeDB into every bot because it was a required peer, even bots using ReForgeDB.
+- The database extension can come before or after ReForgeGiveaways in the extension list. With neither one loaded, the client refuses to start with a message naming both, as `requireExtensions` did before.
+- `GiveawaysDatabaseManager` is deprecated and no longer used. It still extends the `DataBaseManager` of the installed package (ReForgeDB first).
+
+### Tests
+- The suite runs on ReForgeDB by default and on ForgeDB with `GIVEAWAYS_TEST_DB_EXTENSION=forge.db`; CI runs both, on SQLite and PostgreSQL.
+- New `test/database-extension.test.js`: no database extension, each one before giveaways, and both loaded in either order.
+- Test processes no longer depend on a timer ForgeDB left running for 10 s at start-up to stay alive.
+
 ## 2.2.1 (November 2026)
 
 Tag [`v2.2.1`](https://github.com/Demonic1594/ReForgeGiveaways/releases/tag/v2.2.1) · [all changes since 2.2.0](https://github.com/Demonic1594/ReForgeGiveaways/compare/v2.2.0...v2.2.1)

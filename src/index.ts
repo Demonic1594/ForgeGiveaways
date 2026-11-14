@@ -3,11 +3,10 @@ import { ButtonStyle, ColorResolvable, resolveColor } from "discord.js"
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers"
 import { GiveawaysInteractionHandler, GiveawaysReactionHandler, IGiveawayEvents } from "./handlers"
 import { TypedEmitter } from "tiny-typed-emitter"
-import { TransformEvents } from "@tryforge/forge.db"
 import { Database, DEFAULT_MESSAGES, GiveawayMessages } from "./structures"
 import { GiveawaysErrorType } from "./functions/error"
 import noop from "./functions/noop"
-import { shardIdFor } from "./utils"
+import { loadedDatabaseExtensions, MISSING_DATABASE, resolveDatabaseManager, shardIdFor, TransformEvents } from "./utils"
 import { description, version } from "../package.json"
 
 /** Longest the shutdown handler waits for pending writes before letting the process stop. */
@@ -82,7 +81,6 @@ export class ReForgeGiveaways extends ForgeExtension {
     name = "reforge.giveaways"
     description = description
     version = version
-    requireExtensions = ["forge.db"]
 
     public emitter = new TypedEmitter<TransformEvents<IGiveawayEvents>>()
 
@@ -118,6 +116,16 @@ export class ReForgeGiveaways extends ForgeExtension {
         o.messages = { ...DEFAULT_MESSAGES, ...Object.fromEntries(texts) }
     }
 
+    /**
+     * Giveaways are stored with ReForgeDB or ForgeDB, whichever the bot
+     * loaded (ReForgeDB when both are). `requireExtensions` can only name one
+     * extension, so this checks for either one the same way: before loading.
+     */
+    protected override validateAndInit(client: ForgeClient) {
+        if (!loadedDatabaseExtensions(client).length) throw new Error(MISSING_DATABASE)
+        super.validateAndInit(client)
+    }
+
     public async init(client: ForgeClient) {
         this.commands = new GiveawaysCommandManager(client)
 
@@ -148,7 +156,7 @@ export class ReForgeGiveaways extends ForgeExtension {
         this.giveawaysManager = new GiveawaysManager(client, this)
         if (this.options.handleSignals) this.#handleSignals()
 
-        await this.#connect()
+        await this.#connect(client)
         this.giveawaysManager._onDatabaseReady()
     }
 
@@ -157,10 +165,19 @@ export class ReForgeGiveaways extends ForgeExtension {
      * unreachable at boot, instead of failing once and leaving every giveaway
      * function waiting forever.
      */
-    async #connect() {
+    async #connect(client: ForgeClient) {
+        // Extensions listed after this one have not loaded yet: wait until the
+        // client finished loading all of them, so the database extension can
+        // be anywhere in the list.
+        await new Promise<void>((r) => setImmediate(r))
         for (let attempt = 0; ; attempt++) {
             try {
-                await new Database(this.emitter).init()
+                const { label, manager, alsoLoaded } = resolveDatabaseManager(client)
+                if (!attempt) {
+                    Logger.info(`[ReForgeGiveaways] Storing giveaways with ${label}`)
+                    if (alsoLoaded) Logger.warn(`[ReForgeGiveaways] Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`)
+                }
+                await new Database(this.emitter, manager).init()
                 if (attempt) Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`)
                 return
             } catch (e) {

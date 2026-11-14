@@ -1,9 +1,7 @@
-import { GiveawaysDatabaseManager } from "../managers/GiveawaysDatabaseManager";
 import type { IGiveawayEvents } from "../handlers/GiveawaysEventHandler";
+import type { DataBaseManagerClass, EntitiesByDriver, TransformEvents } from "../utils/databaseExtension";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { TransformEvents } from "@tryforge/forge.db";
 import { Snowflake } from "discord.js";
-import { EntitySchema } from "typeorm";
 import { Giveaway, IGiveaway, MongoGiveaway } from "./Giveaway";
 import { DriverKind } from "./schema";
 export type AnyGiveaway = typeof Giveaway | typeof MongoGiveaway;
@@ -16,15 +14,11 @@ export type IGiveawayFindOptions = Partial<Omit<IGiveaway, "entries" | "winners"
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-export declare class Database extends GiveawaysDatabaseManager {
+export declare class Database {
     private readonly emitter;
-    database: string;
-    entityManager: {
-        sqlite: EntitySchema<Giveaway>[];
-        mongodb: EntitySchema<Giveaway>[];
-        mysql: EntitySchema<Giveaway>[];
-        postgres: EntitySchema<Giveaway>[];
-    };
+    /** The database (SQLite: the file) giveaways are stored in. */
+    readonly database = "giveaways.db";
+    readonly entityManager: EntitiesByDriver;
     static entities: {
         Giveaway: AnyGiveaway;
     };
@@ -37,7 +31,12 @@ export declare class Database extends GiveawaysDatabaseManager {
     private static readonly active;
     /** Message id to giveaway id, for active giveaways. */
     private static readonly byMessage;
-    constructor(emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>);
+    /**
+     * @param manager The `DataBaseManager` class of the database extension the
+     * bot loaded (ReForgeDB or ForgeDB; see `resolveDatabaseManager`). Its
+     * connection settings are used, with a database of its own for giveaways.
+     */
+    constructor(emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>, manager: DataBaseManagerClass);
     init(): Promise<void>;
     /** Whether the database finished connecting. */
     static get ready(): boolean;

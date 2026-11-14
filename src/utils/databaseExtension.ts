@@ -1,0 +1,91 @@
+import type { ForgeClient, ForgeExtension } from "@tryforge/forgescript"
+import type { DataSource, EntitySchema } from "typeorm"
+
+/**
+ * The database extensions giveaways can be stored with, in order of
+ * preference. ReForgeGiveaways imports neither package: it uses the one the
+ * bot loaded, so it never pulls in a second copy of TypeORM or of a database
+ * extension.
+ */
+export const DATABASE_EXTENSIONS = ["reforge.db", "forge.db"] as const
+export type DatabaseExtensionName = (typeof DATABASE_EXTENSIONS)[number]
+
+const LABELS: Record<DatabaseExtensionName, string> = { "reforge.db": "ReForgeDB", "forge.db": "ForgeDB" }
+
+/** Same as `TransformEvents` of ForgeDB and ReForgeDB. */
+export type TransformEvents<T> = {
+    [P in keyof T]: T[P] extends any[] ? (...args: T[P]) => any : never
+}
+
+/** Entities per driver, as ForgeDB and ReForgeDB take them. */
+export interface EntitiesByDriver {
+    sqlite: EntitySchema<any>[]
+    mongodb: EntitySchema<any>[]
+    mysql: EntitySchema<any>[]
+    postgres: EntitySchema<any>[]
+}
+
+/** The part of the `DataBaseManager` class of ForgeDB and ReForgeDB that giveaways use. */
+export interface DataBaseManagerLike {
+    database: string
+    entityManager: EntitiesByDriver
+    /** Opens the database named `database`, or returns the open one (protected in both packages). */
+    getDB(): Promise<DataSource>
+}
+export type DataBaseManagerClass = abstract new () => DataBaseManagerLike
+
+/** The database extensions the bot loaded, preferred one first. */
+export function loadedDatabaseExtensions(client: ForgeClient): Array<{ name: DatabaseExtensionName; label: string; extension: ForgeExtension }> {
+    const extensions: ForgeExtension[] = client.options.extensions ?? []
+    const out = []
+    for (const name of DATABASE_EXTENSIONS) {
+        const extension = extensions.find((x) => x.name === name)
+        if (extension) out.push({ name, label: LABELS[name], extension })
+    }
+    return out
+}
+
+export const MISSING_DATABASE =
+    "[ReForgeGiveaways] Needs a database extension: add new ReForgeDB() (npm i github:Demonic1594/ReForgeDB) or new ForgeDB() (npm i @tryforge/forge.db) to your extensions."
+
+function isManagerClass(value: unknown): value is DataBaseManagerClass {
+    return typeof value === "function" && typeof (value as { prototype?: { getDB?: unknown } }).prototype?.getDB === "function"
+}
+
+/**
+ * The `DataBaseManager` a loaded extension's package exports, found through
+ * the module cache so it is the very copy the bot loaded. Undefined when the
+ * module is not in the cache (a bundled bot, for example).
+ */
+function exportedManager(extension: ForgeExtension): DataBaseManagerClass | undefined {
+    const ctor = extension.constructor
+    for (const mod of Object.values(require.cache)) {
+        try {
+            const exports = mod?.exports
+            if (exports && typeof exports === "object" && exports[ctor.name] === ctor && isManagerClass(exports.DataBaseManager)) return exports.DataBaseManager
+        } catch {
+            // A module with odd exports (a throwing getter or proxy): not ours.
+        }
+    }
+    return undefined
+}
+
+/**
+ * Finds the `DataBaseManager` class of the database extension to store
+ * giveaways with. Call it once the client finished loading its extensions.
+ * Both packages set `client.db` to their `DataBase` class, which extends
+ * their `DataBaseManager`. With both loaded, `client.db` is whichever loaded
+ * last, so ReForgeDB's own exports are used instead.
+ */
+export function resolveDatabaseManager(client: ForgeClient): { name: DatabaseExtensionName; label: string; manager: DataBaseManagerClass; alsoLoaded?: string } {
+    const loaded = loadedDatabaseExtensions(client)
+    if (!loaded.length) throw new Error(MISSING_DATABASE)
+    const [preferred, other] = loaded
+    const db = (client as unknown as { db?: unknown }).db
+    const fromClient = typeof db === "function" ? Object.getPrototypeOf(db) : undefined
+    const manager = (other && exportedManager(preferred.extension)) || (isManagerClass(fromClient) ? fromClient : undefined) || exportedManager(preferred.extension)
+    if (!manager) {
+        throw new Error(`[ReForgeGiveaways] ${preferred.label} is in your extensions but did not set up its database (client.db is ${db === undefined ? "missing" : "not its DataBase class"}). Check the errors ${preferred.label} logged at start-up.`)
+    }
+    return { name: preferred.name, label: preferred.label, manager, alsoLoaded: other?.label }
+}

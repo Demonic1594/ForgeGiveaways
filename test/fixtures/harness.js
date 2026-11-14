@@ -1,14 +1,13 @@
 "use strict"
 /*
- * Boots a real ForgeClient (never logs in) with ForgeDB on better-sqlite3 and
- * ReForgeGiveaways, and swaps the three Discord lookups the manager makes for
+ * Boots a real ForgeClient (never logs in) with ReForgeDB (or ForgeDB) on
+ * better-sqlite3 and ReForgeGiveaways, and swaps the three Discord lookups the manager makes for
  * in-memory fakes. Everything else (scheduler, locking, persistence, the
  * renderer, winner drawing) is the real code.
  */
 const path = require("path")
 const { SnowflakeUtil } = require("discord.js")
 const { ForgeClient } = require("@tryforge/forgescript")
-const { ForgeDB } = require("@tryforge/forge.db")
 const { ReForgeGiveaways } = require("../..")
 
 const DAY = 864e5
@@ -16,14 +15,27 @@ const snow = (agoMs = 2 * 365 * DAY) => SnowflakeUtil.generate({ timestamp: Date
 
 /*
  * SQLite in `dir` by default. To run the single-process test files against
- * another database, put its ForgeDB options in GIVEAWAYS_TEST_DB, e.g.
+ * another database, put its database options in GIVEAWAYS_TEST_DB, e.g.
  * GIVEAWAYS_TEST_DB='{"type":"postgres","host":"127.0.0.1","username":"postgres","database":"giveaways_test"}'
  * (use an empty database; the driver, e.g. `pg`, must be installed).
  */
 const database = (dir) => (process.env.GIVEAWAYS_TEST_DB ? JSON.parse(process.env.GIVEAWAYS_TEST_DB) : { type: "better-sqlite3", folder: dir })
 
+/*
+ * The database extension: ReForgeDB by default, the original ForgeDB with
+ * GIVEAWAYS_TEST_DB_EXTENSION=forge.db.
+ */
+const DB_EXTENSION = process.env.GIVEAWAYS_TEST_DB_EXTENSION || "reforge.db"
+const databaseExtensions = {
+    "reforge.db": (options) => new (require("@tryforge/reforge.db").ReForgeDB)({ logLevel: "warn", ...options }),
+    "forge.db": (options) => new (require("@tryforge/forge.db").ForgeDB)(options),
+}
+if (!databaseExtensions[DB_EXTENSION]) throw new Error(`GIVEAWAYS_TEST_DB_EXTENSION must be ${Object.keys(databaseExtensions).join(" or ")}`)
+const databaseExtension = (dir, name = DB_EXTENSION) => databaseExtensions[name](database(dir))
+
 async function boot(dir, options = {}) {
-    const { autoMembers, ...extOptions } = options
+    // `extensions(giveaways, dir)` replaces the extension list (default: giveaways, then the database).
+    const { autoMembers, extensions, ...extOptions } = options
     const giveaways = new ReForgeGiveaways({ handleSignals: false, entryFlushDelay: 50, messageUpdateDelay: 1000, ...extOptions })
     // Record every event from the very start (restore runs during boot).
     const emitted = []
@@ -31,7 +43,7 @@ async function boot(dir, options = {}) {
     giveaways.emitter.emit = (name, ...args) => { emitted.push({ name, args }); return realEmit(name, ...args) }
     const client = new ForgeClient({
         intents: ["Guilds"],
-        extensions: [giveaways, new ForgeDB(database(dir))],
+        extensions: extensions ? extensions(giveaways, dir) : [giveaways, databaseExtension(dir)],
     })
     const manager = giveaways.giveawaysManager
     // Never logs in; pretend to be connected so deadlines are not postponed.
@@ -101,4 +113,4 @@ async function boot(dir, options = {}) {
     return { emitted, client, giveaways, manager, sent, deleted, messages, addMember, members, guild, channel, dir, setGuildState: (v) => { guildState = v } }
 }
 
-module.exports = { boot, snow, DAY, dbFile: (dir) => path.join(dir, "giveaways.db") }
+module.exports = { boot, snow, DAY, DB_EXTENSION, databaseExtension, database, dbFile: (dir) => path.join(dir, "giveaways.db") }

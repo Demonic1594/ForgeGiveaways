@@ -1,7 +1,7 @@
 "use strict"
-// Runs one phase of an integration test in its own process. ForgeDB keeps its
-// configuration in module state, so a "restart" needs a new process; the
-// phases share state only through the SQLite file in `dir`.
+// Runs one phase of an integration test in its own process. ReForgeDB and
+// ForgeDB keep their configuration in module state, so a "restart" needs a new
+// process; the phases share state only through the SQLite file in `dir`.
 const { Collection } = require("discord.js")
 const { boot, snow, DAY } = require("./harness")
 const { Database } = require("../..")
@@ -136,6 +136,9 @@ const phases = {
 }
 
 ;(async () => {
+    // A real bot's gateway connection keeps the process alive; this one never
+    // logs in, and the manager's own timers are unref'd.
+    setInterval(() => {}, 1000)
     const extra = phase === "reactions" ? { useReactions: true } : phase.startsWith("custom") ? { useDefault: false, events: ["giveawayStart"] } : {}
     const h = await boot(dir, { autoMembers: true, ...extra })
     out(await phases[phase](h))

@@ -44,7 +44,6 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
     name = "reforge.giveaways";
     description = package_json_1.description;
     version = package_json_1.version;
-    requireExtensions = ["forge.db"];
     emitter = new tiny_typed_emitter_1.TypedEmitter();
     giveawaysManager;
     commands;
@@ -78,6 +77,16 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         const texts = Object.entries(o.messages ?? {}).filter(([key, text]) => key in structures_1.DEFAULT_MESSAGES && typeof text === "string");
         o.messages = { ...structures_1.DEFAULT_MESSAGES, ...Object.fromEntries(texts) };
     }
+    /**
+     * Giveaways are stored with ReForgeDB or ForgeDB, whichever the bot
+     * loaded (ReForgeDB when both are). `requireExtensions` can only name one
+     * extension, so this checks for either one the same way: before loading.
+     */
+    validateAndInit(client) {
+        if (!(0, utils_1.loadedDatabaseExtensions)(client).length)
+            throw new Error(utils_1.MISSING_DATABASE);
+        super.validateAndInit(client);
+    }
     async init(client) {
         this.commands = new managers_1.GiveawaysCommandManager(client);
         forgescript_1.EventManager.load("ReForgeGiveawaysEvents", __dirname + "/events");
@@ -106,7 +115,7 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         this.giveawaysManager = new managers_1.GiveawaysManager(client, this);
         if (this.options.handleSignals)
             this.#handleSignals();
-        await this.#connect();
+        await this.#connect(client);
         this.giveawaysManager._onDatabaseReady();
     }
     /**
@@ -114,10 +123,20 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
      * unreachable at boot, instead of failing once and leaving every giveaway
      * function waiting forever.
      */
-    async #connect() {
+    async #connect(client) {
+        // Extensions listed after this one have not loaded yet: wait until the
+        // client finished loading all of them, so the database extension can
+        // be anywhere in the list.
+        await new Promise((r) => setImmediate(r));
         for (let attempt = 0;; attempt++) {
             try {
-                await new structures_1.Database(this.emitter).init();
+                const { label, manager, alsoLoaded } = (0, utils_1.resolveDatabaseManager)(client);
+                if (!attempt) {
+                    forgescript_1.Logger.info(`[ReForgeGiveaways] Storing giveaways with ${label}`);
+                    if (alsoLoaded)
+                        forgescript_1.Logger.warn(`[ReForgeGiveaways] Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`);
+                }
+                await new structures_1.Database(this.emitter, manager).init();
                 if (attempt)
                     forgescript_1.Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`);
                 return;

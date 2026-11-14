@@ -19,4 +19,5 @@ __exportStar(require("./KeyedMutex"), exports);
 __exportStar(require("./random"), exports);
 __exportStar(require("./text"), exports);
 __exportStar(require("./emoji"), exports);
+__exportStar(require("./databaseExtension"), exports);
 //# sourceMappingURL=index.js.map
