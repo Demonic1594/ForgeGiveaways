@@ -10,11 +10,19 @@ permissions:
 
 jobs:
   test:
+    name: test (node ${{ matrix.node }}, ${{ matrix.extension }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         node: [20, 22]
+        # The database extension the giveaways are stored with.
+        extension: [reforge.db]
+        include:
+          - node: 22
+            extension: forge.db
+    env:
+      GIVEAWAYS_TEST_DB_EXTENSION: ${{ matrix.extension }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,11 +36,18 @@ jobs:
       # dist/ and metadata/ are committed so the package installs straight
       # from GitHub; fail if they don't match the sources.
       - name: Check that dist/ and metadata/ are up to date
-        if: matrix.node == 22
+        if: matrix.node == 22 && matrix.extension == 'reforge.db'
         run: git diff --exit-code -- dist metadata
 
   postgres:
+    name: postgres (${{ matrix.extension }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        extension: [reforge.db, forge.db]
+    env:
+      GIVEAWAYS_TEST_DB_EXTENSION: ${{ matrix.extension }}
     services:
       postgres:
         image: postgres:16

@@ -63,21 +63,22 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 <h3 align="center">Installation</h3><hr>
 
 > ⚠️ **Warning**\
-> **ReForgeGiveaways** requires the extension [**ForgeDB**](https://docs.botforge.org/p/ForgeDB/) installed in order to operate.
+> **ReForgeGiveaways** stores giveaways with a database extension: [**ReForgeDB**](https://github.com/Demonic1594/ReForgeDB) (recommended) or the original [**ForgeDB**](https://docs.botforge.org/p/ForgeDB/). Without one, the bot refuses to start and says so.
 
 1. Run the following command to install the required `npm` packages:
     ```bash
-    npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db
+    npm i github:Demonic1594/ReForgeGiveaways github:Demonic1594/ReForgeDB
     ```
+    Using the original ForgeDB instead: `npm i github:Demonic1594/ReForgeGiveaways @tryforge/forge.db`.
 
     > ℹ️ **Note**\
-    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.2.1`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
+    > The compiled code is committed, so no build step is needed. The command above follows `main`; to pin a release, add its tag, e.g. `npm i github:Demonic1594/ReForgeGiveaways#v2.3.0`. All releases are listed under [tags](https://github.com/Demonic1594/ReForgeGiveaways/tags).
 
 2. Here's an example of how your main file should look:
     ```js
     const { ForgeClient } = require("@tryforge/forgescript")
     const { ReForgeGiveaways } = require("@tryforge/reforge.giveaways")
-    const { ForgeDB } = require("@tryforge/forge.db")
+    const { ReForgeDB } = require("@tryforge/reforge.db") // or: const { ForgeDB } = require("@tryforge/forge.db")
 
     const giveaways = new ReForgeGiveaways({
         events: [
@@ -91,7 +92,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
         ...options, // The options you currently have
         extensions: [
             giveaways,
-            new ForgeDB()
+            new ReForgeDB() // or: new ForgeDB()
         ]
     })
 
@@ -102,7 +103,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > `@tryforge/forgescript`, `@tryforge/forge.db` and `discord.js` are peer dependencies: your bot provides them, so only one copy of each is loaded.
+    > `@tryforge/forgescript`, `discord.js` and the database extension are peer dependencies: your bot provides them, so only one copy of each is loaded. ReForgeGiveaways uses the database extension your bot loaded (not one of its own), its connection settings, and a database of its own named `giveaways.db` (on SQLite, a file next to `reforge.db` or `forge.db`). The order of the extensions does not matter. Load only one of ReForgeDB and ForgeDB: they add the same functions. If both are loaded, giveaways use ReForgeDB and a warning is logged.
 
 <h3 align="center">Options</h3><hr>
 
@@ -404,8 +405,13 @@ Everything about a giveaway lives in the database, so the bot can stop at any mo
 Install the new release over the old one; there is nothing to migrate by hand. On the first start the database is upgraded in place, and only nullable columns are ever added, so your giveaways and entries are kept.
 
 ```bash
-npm i github:Demonic1594/ReForgeGiveaways#v2.2.1
+npm i github:Demonic1594/ReForgeGiveaways#v2.3.0
 ```
+
+#### From 2.2.1 to 2.3.0
+No database changes, and nothing to change in your bot. New: [ReForgeDB](https://github.com/Demonic1594/ReForgeDB) works as the database extension, besides ForgeDB, and is preferred when both are loaded. `@tryforge/forge.db` is no longer installed automatically with ReForgeGiveaways: keep it in your bot's own dependencies if you use it (it already is if you followed the installation steps).
+
+Switching from ForgeDB to ReForgeDB keeps your giveaways: give ReForgeDB the options you gave ForgeDB and it opens the same `giveaways.db` database (on SQLite, the file in the `database` folder). For your variables, see "Switching from ForgeDB" in [ReForgeDB's README](https://github.com/Demonic1594/ReForgeDB).
 
 #### From 2.2.0 to 2.2.1
 No database changes. `$setGiveawayImage` and `$setGiveawayThumbnail` now refuse a link that is not http(s) (or is longer than 2048 characters) with an error; before, it was silently stored as a broken image.
@@ -445,9 +451,11 @@ New in 2.1.0: `$rerollGiveawayWinner`, `$clearGiveawayRequirements`, `$clearBonu
 ```bash
 npm install
 npm run build      # compile TypeScript to dist/
-npm test           # build, then run all tests (SQLite)
+npm test           # build, then run all tests (SQLite, ReForgeDB)
 npm run docgen     # regenerate metadata/*.json
 ```
+
+The tests use ReForgeDB. Run them with the original ForgeDB with `GIVEAWAYS_TEST_DB_EXTENSION=forge.db npm test`; CI runs both.
 
 The test suite covers the scheduler, locking, statistical fairness, multi-process restart and crash scenarios, upgrading a database of the original extension, and a seeded fuzzer that runs thousands of random concurrent operations with injected database failures. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
 
@@ -471,7 +479,7 @@ node --test test/regression.test.js   # likewise adversarial, custom and hardeni
     ```
 
 > ⚠️ **Warning**\
-> Never change the type or length of an existing column in `src/structures/schema.ts`. ForgeDB lets TypeORM synchronize the schema, and on PostgreSQL and MySQL TypeORM changes a column by dropping and re-creating it. Adding nullable columns is safe.
+> Never change the type or length of an existing column in `src/structures/schema.ts`. ReForgeDB and ForgeDB let TypeORM synchronize the schema, and on PostgreSQL and MySQL TypeORM changes a column by dropping and re-creating it. Adding nullable columns is safe.
 
 <h3 align="center">Credits and License</h3><hr>
 

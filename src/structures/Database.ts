@@ -1,7 +1,6 @@
-import { GiveawaysDatabaseManager } from "../managers/GiveawaysDatabaseManager"
 import type { IGiveawayEvents } from "../handlers/GiveawaysEventHandler"
+import type { DataBaseManagerClass, EntitiesByDriver, TransformEvents } from "../utils/databaseExtension"
 import { TypedEmitter } from "tiny-typed-emitter"
-import { TransformEvents } from "@tryforge/forge.db"
 import { Snowflake } from "discord.js"
 import { DataSource, EntitySchema, In, Repository } from "typeorm"
 import { Giveaway, IGiveaway, MongoGiveaway } from "./Giveaway"
@@ -39,10 +38,11 @@ const schemas = {
  * write still goes to the database. This assumes one bot process owns the
  * giveaway table, which is how ForgeScript bots normally run.
  */
-export class Database extends GiveawaysDatabaseManager {
-    public database = "giveaways.db"
+export class Database {
+    /** The database (SQLite: the file) giveaways are stored in. */
+    public readonly database = "giveaways.db"
 
-    public entityManager = {
+    public readonly entityManager: EntitiesByDriver = {
         sqlite: [schemas.sqlite],
         mongodb: [schemas.mongodb],
         mysql: [schemas.mysql],
@@ -62,9 +62,21 @@ export class Database extends GiveawaysDatabaseManager {
     /** Message id to giveaway id, for active giveaways. */
     private static readonly byMessage = new Map<Snowflake, Snowflake>()
 
-    constructor(private readonly emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>) {
-        super()
-        this.db = this.getDB()
+    /**
+     * @param manager The `DataBaseManager` class of the database extension the
+     * bot loaded (ReForgeDB or ForgeDB; see `resolveDatabaseManager`). Its
+     * connection settings are used, with a database of its own for giveaways.
+     */
+    constructor(private readonly emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>, manager: DataBaseManagerClass) {
+        const { database, entityManager } = this
+        class GiveawaysConnection extends manager {
+            database = database
+            entityManager = entityManager
+            open() {
+                return this.getDB()
+            }
+        }
+        this.db = new GiveawaysConnection().open()
     }
 
     public async init() {

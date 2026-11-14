@@ -3,8 +3,8 @@ import { ButtonStyle, ColorResolvable } from "discord.js";
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers";
 import { IGiveawayEvents } from "./handlers";
 import { TypedEmitter } from "tiny-typed-emitter";
-import { TransformEvents } from "@tryforge/forge.db";
 import { GiveawayMessages } from "./structures";
+import { TransformEvents } from "./utils";
 export interface IReForgeGiveawaysOptions {
     /** The giveaway events to use. */
     events?: Array<keyof IGiveawayEvents>;
@@ -57,11 +57,16 @@ export declare class ReForgeGiveaways extends ForgeExtension {
     name: string;
     description: string;
     version: string;
-    requireExtensions: string[];
     emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>;
     giveawaysManager: GiveawaysManager;
     commands: GiveawaysCommandManager;
     constructor(options?: IReForgeGiveawaysOptions);
+    /**
+     * Giveaways are stored with ReForgeDB or ForgeDB, whichever the bot
+     * loaded (ReForgeDB when both are). `requireExtensions` can only name one
+     * extension, so this checks for either one the same way: before loading.
+     */
+    protected validateAndInit(client: ForgeClient): void;
     init(client: ForgeClient): Promise<void>;
 }
 export * from "./handlers";
