@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GiveawaysErrorType = void 0;
 exports.throwGiveawaysError = throwGiveawaysError;
-const forgescript_1 = require("@tryforge/forgescript");
+const logger_1 = require("../utils/logger");
 var GiveawaysErrorType;
 (function (GiveawaysErrorType) {
     GiveawaysErrorType["MessageNotFound"] = "Could not find and update the message for giveaway with ID \"$1\"";
@@ -22,6 +22,6 @@ var GiveawaysErrorType;
 function throwGiveawaysError(type, value) {
     const key = Object.keys(GiveawaysErrorType).find((x) => GiveawaysErrorType[x] === type);
     const message = type.replace(/\$(\d+)/g, () => value ?? "");
-    forgescript_1.Logger.error(`[ReForgeGiveaways] ${key}: ${message}`);
+    logger_1.ReForgeGiveawaysLogger.error(`${key}: ${message}`);
 }
 //# sourceMappingURL=error.js.map

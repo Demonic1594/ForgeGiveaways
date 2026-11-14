@@ -4,19 +4,16 @@
 // where the giveaway was stored and what was logged.
 const fs = require("fs")
 const path = require("path")
-const { Logger } = require("@tryforge/forgescript")
+const { Logger, LogType } = require("@tryforge/forgescript")
 const { boot, snow, DAY } = require("./harness")
 const { Database } = require("../..")
 
 const [, , dir, scenario] = process.argv
 const logs = []
-for (const level of ["info", "warn", "error"]) {
-    const original = Logger[level].bind(Logger)
-    Logger[level] = (...args) => {
-        logs.push({ level, text: args.map(String).join(" ") })
-        return original(...args)
-    }
-}
+const record = (level) => (...args) => logs.push({ level, text: args.map(String).join(" ") })
+for (const level of ["info", "warn", "error"]) Logger[level] = record(level)
+// ReForgeGiveaways writes through Logger.log (with its own level gate).
+Logger.log = (_priority, type, ...args) => record(String(LogType[type] ?? type).toLowerCase())(...args)
 
 const reforge = (folder) => new (require("@tryforge/reforge.db").ReForgeDB)({ type: "better-sqlite3", folder, logLevel: "warn" })
 const forge = (folder) => new (require("@tryforge/forge.db").ForgeDB)({ type: "better-sqlite3", folder })

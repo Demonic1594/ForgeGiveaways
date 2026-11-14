@@ -103,7 +103,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
     ```
 
     > ℹ️ **Note**\
-    > `@tryforge/forgescript`, `discord.js` and the database extension are peer dependencies: your bot provides them, so only one copy of each is loaded. ReForgeGiveaways uses the database extension your bot loaded (not one of its own), its connection settings, and a database of its own named `giveaways.db` (on SQLite, a file next to `reforge.db` or `forge.db`). The order of the extensions does not matter. Load only one of ReForgeDB and ForgeDB: they add the same functions. If both are loaded, giveaways use ReForgeDB and a warning is logged.
+    > `@tryforge/forgescript`, `discord.js` and the database extension are peer dependencies: your bot provides them, so only one copy of each is loaded. ReForgeGiveaways uses the database extension your bot loaded (not one of its own), its connection settings, and a database of its own named `giveaways.db` (on SQLite, a file next to `reforge.db` or `forge.db`). The order of the extensions does not matter. Load only one of ReForgeDB and ForgeDB: they add the same functions. If both are loaded, giveaways use ReForgeDB and a warning is logged. With ForgeDB alone, a one-time reminder to switch to ReForgeDB is logged at start-up (shared with the other ReForge extensions, so a bot sees it once); `logLevel: "warn"` hides it.
 
 <h3 align="center">Options</h3><hr>
 
@@ -125,6 +125,7 @@ Found while stress-testing the rework, and fixed: joins that cost O(n) each (a m
 | `messageUpdateDelay` | `5000` | Refresh the entry counter at most this often (ms) |
 | `deleteEndedAfter` | off | Delete ended giveaways this many ms after they ended |
 | `handleSignals` | `true` | Save pending writes on `SIGINT`/`SIGTERM` |
+| `logLevel` | `"info"` | Console output: `silent`, `error`, `warn`, `info`, `debug` (every giveaway action and entry write, with its time) or `trace` (also timers and message refreshes). The `REFORGEGIVEAWAYS_LOG_LEVEL` environment variable sets it when the option is not given |
 
 > ⚠️ **Warning**\
 > Reaction mode (`useReactions: true`) needs the `GuildMessageReactions` intent and the `Message` and `Reaction` partials.
@@ -455,7 +456,7 @@ npm test           # build, then run all tests (SQLite, ReForgeDB)
 npm run docgen     # regenerate metadata/*.json
 ```
 
-The tests use ReForgeDB. Run them with the original ForgeDB with `GIVEAWAYS_TEST_DB_EXTENSION=forge.db npm test`; CI runs both.
+The tests use ReForgeDB. Run them with the original ForgeDB with `GIVEAWAYS_TEST_DB_EXTENSION=forge.db npm test`; CI runs both, on Node.js 22 and 24, plus the oldest ForgeScript the peer range allows (2.5.0).
 
 The test suite covers the scheduler, locking, statistical fairness, multi-process restart and crash scenarios, upgrading a database of the original extension, and a seeded fuzzer that runs thousands of random concurrent operations with injected database failures. Run a specific fuzz seed with `FUZZ_SEED=42 npm test`.
 

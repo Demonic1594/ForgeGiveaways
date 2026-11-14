@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22]
+        node: [22, 24]
         # The database extension the giveaways are stored with.
         extension: [reforge.db]
         include:
@@ -38,6 +38,19 @@ jobs:
       - name: Check that dist/ and metadata/ are up to date
         if: matrix.node == 22 && matrix.extension == 'reforge.db'
         run: git diff --exit-code -- dist metadata
+
+  # The oldest ForgeScript the peer range allows.
+  forgescript-2-5:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm i --no-save @tryforge/forgescript@2.5.0
+      - run: npm test
 
   postgres:
     name: postgres (${{ matrix.extension }})

@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MISSING_DATABASE = exports.DATABASE_EXTENSIONS = void 0;
+exports.SWITCH_GUIDE = exports.MISSING_DATABASE = exports.DATABASE_EXTENSIONS = void 0;
 exports.loadedDatabaseExtensions = loadedDatabaseExtensions;
 exports.resolveDatabaseManager = resolveDatabaseManager;
+exports.remindToSwitch = remindToSwitch;
+const logger_1 = require("./logger");
 /**
  * The database extensions giveaways can be stored with, in order of
  * preference. ReForgeGiveaways imports neither package: it uses the one the
@@ -64,5 +66,21 @@ function resolveDatabaseManager(client) {
         throw new Error(`[ReForgeGiveaways] ${preferred.label} is in your extensions but did not set up its database (client.db is ${db === undefined ? "missing" : "not its DataBase class"}). Check the errors ${preferred.label} logged at start-up.`);
     }
     return { name: preferred.name, label: preferred.label, manager, alsoLoaded: other?.label };
+}
+exports.SWITCH_GUIDE = "https://github.com/Demonic1594/ReForgeDB#switching-from-forgedb";
+/**
+ * Shared by every ReForge extension in the process: the reminder to switch
+ * from ForgeDB to ReForgeDB is shown once, however many of them notice.
+ */
+const REMINDED = Symbol.for("reforge.forgeDBReminder");
+/** Shows the reminder to switch to ReForgeDB once per process. Returns whether it was shown now. */
+function remindToSwitch() {
+    const store = globalThis;
+    if (store[REMINDED])
+        return false;
+    store[REMINDED] = true;
+    logger_1.ReForgeGiveawaysLogger.info("This bot uses ForgeDB (forge.db). Consider switching to ReForgeDB (reforge.db): it keeps using your existing data as it is, " +
+        `and with other ReForge extensions it means fewer complications, better compatibility and a better experience. How to switch: ${exports.SWITCH_GUIDE}`);
+    return true;
 }
 //# sourceMappingURL=databaseExtension.js.map

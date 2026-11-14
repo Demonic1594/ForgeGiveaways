@@ -38,6 +38,8 @@ export declare class Database {
      */
     constructor(emitter: TypedEmitter<TransformEvents<IGiveawayEvents>>, manager: DataBaseManagerClass);
     init(): Promise<void>;
+    /** The TypeORM driver in use (`sqlite`, `better-sqlite3`, `postgres`, ...), or undefined before connecting. */
+    static get driverName(): string | undefined;
     /** Whether the database finished connecting. */
     static get ready(): boolean;
     private static repo;

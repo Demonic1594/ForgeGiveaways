@@ -27,6 +27,7 @@ const structures_1 = require("./structures");
 const error_1 = require("./functions/error");
 const noop_1 = __importDefault(require("./functions/noop"));
 const utils_1 = require("./utils");
+const logger_1 = require("./utils/logger");
 const package_json_1 = require("../package.json");
 /** Longest the shutdown handler waits for pending writes before letting the process stop. */
 const SHUTDOWN_TIMEOUT = 5000;
@@ -44,6 +45,8 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
     name = "reforge.giveaways";
     description = package_json_1.description;
     version = package_json_1.version;
+    /** The database extension the giveaways are stored with, once connected: `reforge.db` or `forge.db`. */
+    databaseExtension = null;
     emitter = new tiny_typed_emitter_1.TypedEmitter();
     giveawaysManager;
     commands;
@@ -51,6 +54,11 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         super();
         this.options = options;
         const o = this.options;
+        if (o.logLevel !== undefined) {
+            if (!(0, logger_1.isLogLevel)(o.logLevel))
+                throw new Error(`[ReForgeGiveaways] "logLevel" must be one of ${logger_1.LOG_LEVELS.join(", ")}, got ${JSON.stringify(o.logLevel)}`);
+            logger_1.ReForgeGiveawaysLogger.level = o.logLevel;
+        }
         o.useDefault ??= true;
         o.useReactions ??= false;
         o.emoji ||= "🎉";
@@ -83,8 +91,12 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
      * extension, so this checks for either one the same way: before loading.
      */
     validateAndInit(client) {
-        if (!(0, utils_1.loadedDatabaseExtensions)(client).length)
+        const loaded = (0, utils_1.loadedDatabaseExtensions)(client);
+        if (!loaded.length)
             throw new Error(utils_1.MISSING_DATABASE);
+        // ForgeDB alone: remind once that ReForgeDB is the better fit.
+        if (loaded[0].name === "forge.db")
+            (0, utils_1.remindToSwitch)();
         super.validateAndInit(client);
     }
     async init(client) {
@@ -94,7 +106,7 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         if (this.options.useReactions) {
             new handlers_1.GiveawaysReactionHandler(client);
             if (!client.options.intents.has("GuildMessageReactions")) {
-                forgescript_1.Logger.warn(`[ReForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`);
+                logger_1.ReForgeGiveawaysLogger.warn(`Intent "GuildMessageReactions" must be defined for reactions to function`);
             }
         }
         else {
@@ -130,20 +142,22 @@ class ReForgeGiveaways extends forgescript_1.ForgeExtension {
         await new Promise((r) => setImmediate(r));
         for (let attempt = 0;; attempt++) {
             try {
-                const { label, manager, alsoLoaded } = (0, utils_1.resolveDatabaseManager)(client);
+                const { name, label, manager, alsoLoaded } = (0, utils_1.resolveDatabaseManager)(client);
                 if (!attempt) {
-                    forgescript_1.Logger.info(`[ReForgeGiveaways] Storing giveaways with ${label}`);
+                    logger_1.ReForgeGiveawaysLogger.info(`Storing giveaways with ${label}`);
                     if (alsoLoaded)
-                        forgescript_1.Logger.warn(`[ReForgeGiveaways] Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`);
+                        logger_1.ReForgeGiveawaysLogger.warn(`Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`);
                 }
                 await new structures_1.Database(this.emitter, manager).init();
+                this.databaseExtension = name;
+                logger_1.ReForgeGiveawaysLogger.debug(`database connected through ${name} (${structures_1.Database.driverName})`);
                 if (attempt)
-                    forgescript_1.Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`);
+                    logger_1.ReForgeGiveawaysLogger.info(`Database connected after ${attempt + 1} attempts`);
                 return;
             }
             catch (e) {
                 const wait = Math.min(1000 * 2 ** attempt, 60_000);
-                forgescript_1.Logger.error(`[ReForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e);
+                logger_1.ReForgeGiveawaysLogger.error(`Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e);
                 await new Promise((r) => setTimeout(r, wait));
             }
         }

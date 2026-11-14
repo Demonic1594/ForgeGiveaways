@@ -1,12 +1,14 @@
-import { EventManager, ForgeClient, ForgeExtension, Logger } from "@tryforge/forgescript"
+import { EventManager, ForgeClient, ForgeExtension } from "@tryforge/forgescript"
 import { ButtonStyle, ColorResolvable, resolveColor } from "discord.js"
 import { GiveawaysCommandManager, GiveawaysManager } from "./managers"
 import { GiveawaysInteractionHandler, GiveawaysReactionHandler, IGiveawayEvents } from "./handlers"
 import { TypedEmitter } from "tiny-typed-emitter"
+import type { DatabaseExtensionName } from "./utils/databaseExtension"
 import { Database, DEFAULT_MESSAGES, GiveawayMessages } from "./structures"
 import { GiveawaysErrorType } from "./functions/error"
 import noop from "./functions/noop"
-import { loadedDatabaseExtensions, MISSING_DATABASE, resolveDatabaseManager, shardIdFor, TransformEvents } from "./utils"
+import { loadedDatabaseExtensions, MISSING_DATABASE, remindToSwitch, resolveDatabaseManager, shardIdFor, TransformEvents } from "./utils"
+import { isLogLevel, LOG_LEVELS, LogLevel, ReForgeGiveawaysLogger as log } from "./utils/logger"
 import { description, version } from "../package.json"
 
 /** Longest the shutdown handler waits for pending writes before letting the process stop. */
@@ -75,12 +77,22 @@ export interface IReForgeGiveawaysOptions {
 
     /** Flush pending writes on SIGINT/SIGTERM before the process exits. Defaults to `true`. */
     handleSignals?: boolean
+
+    /**
+     * What is written to the console: `silent`, `error`, `warn`, `info`
+     * (default), `debug` (every giveaway action and entry write) or `trace`
+     * (also timers and message refreshes). The `REFORGEGIVEAWAYS_LOG_LEVEL`
+     * environment variable sets it when this is not given.
+     */
+    logLevel?: LogLevel
 }
 
 export class ReForgeGiveaways extends ForgeExtension {
     name = "reforge.giveaways"
     description = description
     version = version
+    /** The database extension the giveaways are stored with, once connected: `reforge.db` or `forge.db`. */
+    public databaseExtension: DatabaseExtensionName | null = null
 
     public emitter = new TypedEmitter<TransformEvents<IGiveawayEvents>>()
 
@@ -90,6 +102,10 @@ export class ReForgeGiveaways extends ForgeExtension {
     public constructor(public readonly options: IReForgeGiveawaysOptions = {}) {
         super()
         const o = this.options
+        if (o.logLevel !== undefined) {
+            if (!isLogLevel(o.logLevel)) throw new Error(`[ReForgeGiveaways] "logLevel" must be one of ${LOG_LEVELS.join(", ")}, got ${JSON.stringify(o.logLevel)}`)
+            log.level = o.logLevel
+        }
         o.useDefault ??= true
         o.useReactions ??= false
         o.emoji ||= "🎉"
@@ -122,7 +138,10 @@ export class ReForgeGiveaways extends ForgeExtension {
      * extension, so this checks for either one the same way: before loading.
      */
     protected override validateAndInit(client: ForgeClient) {
-        if (!loadedDatabaseExtensions(client).length) throw new Error(MISSING_DATABASE)
+        const loaded = loadedDatabaseExtensions(client)
+        if (!loaded.length) throw new Error(MISSING_DATABASE)
+        // ForgeDB alone: remind once that ReForgeDB is the better fit.
+        if (loaded[0].name === "forge.db") remindToSwitch()
         super.validateAndInit(client)
     }
 
@@ -135,7 +154,7 @@ export class ReForgeGiveaways extends ForgeExtension {
         if (this.options.useReactions) {
             new GiveawaysReactionHandler(client)
             if (!client.options.intents.has("GuildMessageReactions")) {
-                Logger.warn(`[ReForgeGiveaways] Intent "GuildMessageReactions" must be defined for reactions to function`)
+                log.warn(`Intent "GuildMessageReactions" must be defined for reactions to function`)
             }
         } else {
             new GiveawaysInteractionHandler(client)
@@ -172,17 +191,19 @@ export class ReForgeGiveaways extends ForgeExtension {
         await new Promise<void>((r) => setImmediate(r))
         for (let attempt = 0; ; attempt++) {
             try {
-                const { label, manager, alsoLoaded } = resolveDatabaseManager(client)
+                const { name, label, manager, alsoLoaded } = resolveDatabaseManager(client)
                 if (!attempt) {
-                    Logger.info(`[ReForgeGiveaways] Storing giveaways with ${label}`)
-                    if (alsoLoaded) Logger.warn(`[ReForgeGiveaways] Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`)
+                    log.info(`Storing giveaways with ${label}`)
+                    if (alsoLoaded) log.warn(`Both ${label} and ${alsoLoaded} are loaded. They add the same functions, so keep only one (giveaways use ${label}).`)
                 }
                 await new Database(this.emitter, manager).init()
-                if (attempt) Logger.info(`[ReForgeGiveaways] Database connected after ${attempt + 1} attempts`)
+                this.databaseExtension = name
+                log.debug(`database connected through ${name} (${Database.driverName})`)
+                if (attempt) log.info(`Database connected after ${attempt + 1} attempts`)
                 return
             } catch (e) {
                 const wait = Math.min(1000 * 2 ** attempt, 60_000)
-                Logger.error(`[ReForgeGiveaways] Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
+                log.error(`Could not connect to the database (attempt ${attempt + 1}), retrying in ${wait / 1000}s:`, e)
                 await new Promise((r) => setTimeout(r, wait))
             }
         }

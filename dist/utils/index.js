@@ -20,4 +20,5 @@ __exportStar(require("./random"), exports);
 __exportStar(require("./text"), exports);
 __exportStar(require("./emoji"), exports);
 __exportStar(require("./databaseExtension"), exports);
+__exportStar(require("./logger"), exports);
 //# sourceMappingURL=index.js.map
