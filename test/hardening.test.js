@@ -98,12 +98,14 @@ test("reacting and unreacting in a loop is throttled like the button", async () 
 })
 
 test("clicks on a deleted giveaway's message are logged once, not once per click", async () => {
-    const { Logger } = require("@tryforge/forgescript")
+    const { Logger, LogType } = require("@tryforge/forgescript")
     const ext = { options: { useDefault: true, messages: DEFAULT_MESSAGES, entryCooldown: 0 }, emitter: { listenerCount: () => 0 } }
     const handler = new GiveawaysInteractionHandler({ on() {}, getExtension: () => ext })
     const realError = Logger.error
+    const realLog = Logger.log
     const logged = []
     Logger.error = (...a) => logged.push(a)
+    Logger.log = (_priority, type, ...a) => type === LogType.Error && logged.push(a)
     const desc = Object.getOwnPropertyDescriptor(Database, "ready")
     const realGet = Database.getByMessage
     Object.defineProperty(Database, "ready", { get: () => true, configurable: true })
@@ -115,6 +117,7 @@ test("clicks on a deleted giveaway's message are logged once, not once per click
         }
     } finally {
         Logger.error = realError
+        Logger.log = realLog
         Object.defineProperty(Database, "ready", desc)
         Database.getByMessage = realGet
     }

@@ -1,5 +1,6 @@
 import { DiscordAPIError, Guild, GuildMember, Message, RESTJSONErrorCodes, Snowflake, User } from "discord.js"
-import { ForgeClient, Logger } from "@tryforge/forgescript"
+import { ForgeClient } from "@tryforge/forgescript"
+import { ReForgeGiveawaysLogger as log } from "../utils/logger"
 import {
     Database,
     Giveaway,
@@ -183,7 +184,10 @@ export class GiveawaysManager {
     // Helpers
     // ----------------------------------------------------------------------
 
-    private emit: ReForgeGiveaways["emitter"]["emit"] = (...args) => this.giveaways.emitter.emit(...args)
+    private emit: ReForgeGiveaways["emitter"]["emit"] = (...args) => {
+        if (log.enabled("debug")) log.debug(describeEvent(args[0], args.slice(1)))
+        return this.giveaways.emitter.emit(...args)
+    }
 
     /** Whether anything listens to an event, so snapshots are only built when needed. */
     private wants(event: Parameters<ReForgeGiveaways["emitter"]["emit"]>[0]) {
@@ -268,8 +272,10 @@ export class GiveawaysManager {
                 // Always write the *current* state. Writing the object captured
                 // when the timer was set could overwrite a newer saved change
                 // (e.g. resurrect a giveaway that was ended meanwhile).
+                const started = performance.now()
                 const cur = await Database.get(id)
                 if (cur) await Database.set(cur)
+                if (cur) log.debug(`giveaway ${id}: entries written (${cur.entries.length} entries, ${(performance.now() - started).toFixed(1)} ms)`)
             }).catch((e) => {
                 noop(e)
                 this.#scheduleFlush(id, RETRY_FLUSH)
@@ -284,6 +290,7 @@ export class GiveawaysManager {
         const { useDefault, showEntryCount } = this.giveaways.options
         if (!useDefault || !g.messageID || this.#refreshTimers.has(g.id)) return
         if (!showEntryCount) return
+        log.trace(`giveaway ${g.id}: message refresh in ${this.giveaways.options.messageUpdateDelay} ms`)
         const t = setTimeout(() => {
             this.#refreshTimers.delete(g.id)
             this.#lock.run(g.id, async () => {
@@ -322,7 +329,10 @@ export class GiveawaysManager {
 
     private schedule(g: Giveaway) {
         if (g.hasEnded || g.isPaused() || !Database.owns(g.guildID)) this.scheduler.cancel(g.id)
-        else this.scheduler.schedule(g.id, g.endTimestamp())
+        else {
+            log.trace(`giveaway ${g.id}: timer set for ${new Date(g.endTimestamp()).toISOString()}`)
+            this.scheduler.schedule(g.id, g.endTimestamp())
+        }
     }
 
     // ----------------------------------------------------------------------
@@ -480,7 +490,7 @@ export class GiveawaysManager {
         if (overdue < MAX_POSTPONE) {
             const status = this.client.isReady() ? await this.guildStatus(giveaway.guildID) : "unavailable"
             if (status === "unavailable") {
-                Logger.warn(`[ReForgeGiveaways] Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`)
+                log.warn(`Guild of giveaway ${id} is unavailable, retrying the draw in ${RETRY_DELAY / 1000}s`)
                 this.scheduler.schedule(id, Date.now() + RETRY_DELAY)
                 return null
             }
@@ -1003,7 +1013,7 @@ export class GiveawaysManager {
         const active = Database.activeGiveaways()
         for (const g of active) this.schedule(g)
         const overdue = active.filter((g) => !g.isPaused() && g.endTimestamp() <= Date.now()).length
-        Logger.info(`[ReForgeGiveaways] Restored ${active.length} active giveaway(s)` +
+        log.info(`Restored ${active.length} active giveaway(s)` +
             (overdue ? `, ${overdue} ended while offline and will be drawn now` : "") +
             (pending.length ? `, re-announced ${pending.length} result(s)` : ""))
 
@@ -1036,7 +1046,7 @@ export class GiveawaysManager {
                         // The custom start event never got to send its message: run it again.
                         if (this.wants("giveawayStart")) this.emit("giveawayStart", cur.clone())
                     } else if (await this.postMessage(cur.clone())) {
-                        Logger.info(`[ReForgeGiveaways] Posted the missing message of giveaway ${cur.id}`)
+                        log.info(`Posted the missing message of giveaway ${cur.id}`)
                     } else {
                         throwGiveawaysError(GiveawaysErrorType.MessageNotDetermined, cur.id)
                     }
@@ -1119,4 +1129,11 @@ export class GiveawaysManager {
         this.#refreshTimers.clear()
         await this.flushAll()
     }
+}
+
+/** One debug line for a giveaway event: its name, the giveaway, and who it is about. */
+function describeEvent(name: unknown, args: unknown[]): string {
+    const g = args.find((a): a is { id: string; prize?: string } => !!a && typeof a === "object" && "id" in a && "prize" in a)
+    const user = args.find((a): a is string => typeof a === "string" && /^\d{15,22}$/.test(a))
+    return `${String(name)}${g ? ` giveaway ${g.id} (${g.prize})` : ""}${user ? ` user ${user}` : ""}`
 }

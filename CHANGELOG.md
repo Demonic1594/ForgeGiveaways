@@ -9,6 +9,8 @@ Works with [ReForgeDB](https://github.com/Demonic1594/ReForgeDB) as well as Forg
 ### Added
 - ReForgeDB support. Giveaways use whichever of ReForgeDB and ForgeDB the bot loaded, ReForgeDB when both are (with a warning to keep only one, since both add the same functions). Before, the extension required one named `forge.db` and refused to start with ReForgeDB.
 - `TransformEvents`, `resolveDatabaseManager`, `loadedDatabaseExtensions` and `DATABASE_EXTENSIONS` are exported.
+- `logLevel` option (`silent`, `error`, `warn`, `info`, `debug`, `trace`) and the `REFORGEGIVEAWAYS_LOG_LEVEL` environment variable, like ReForgeDB and ReForgeTopGG. `debug` shows the database in use, every giveaway action (start, end, reroll, pause, resume, cancel, entries) and every entry write with its time; `trace` also timers and message refreshes. Every line starts with `[ReForgeGiveaways]`, as before. `ReForgeGiveawaysLogger` is exported.
+- With ForgeDB alone, a one-time reminder at start-up to consider switching to ReForgeDB (your data is used as it is), with a link to the switching guide. It is shown once per process, shared with the other ReForge extensions through a global symbol, and `logLevel: "warn"` hides it.
 
 ### Changed
 - ReForgeGiveaways no longer imports a database package. It takes the `DataBaseManager` class from the extension the bot loaded (`client.db`, or the package's exports when both are loaded), so it always shares that extension's connection settings and TypeORM copy.
@@ -18,6 +20,8 @@ Works with [ReForgeDB](https://github.com/Demonic1594/ReForgeDB) as well as Forg
 
 ### Tests
 - The suite runs on ReForgeDB by default and on ForgeDB with `GIVEAWAYS_TEST_DB_EXTENSION=forge.db`; CI runs both, on SQLite and PostgreSQL.
+- CI runs on Node.js 22 and 24 (was 20 and 22; ForgeScript 2.8 itself needs 22), plus a job on ForgeScript 2.5.0, the oldest the peer range allows. The `engines` field still allows Node.js 18.17 and newer.
+- New `test/switch-reminder.test.js`: ReForgeDB only, ForgeDB only (reminder once, never twice), `logLevel` hiding it, both loaded, neither, and `logLevel` debug output.
 - New `test/database-extension.test.js`: no database extension, each one before giveaways, and both loaded in either order.
 - Test processes no longer depend on a timer ForgeDB left running for 10 s at start-up to stay alive.
 

@@ -1,4 +1,5 @@
-import { ForgeClient, Logger } from "@tryforge/forgescript"
+import { ForgeClient } from "@tryforge/forgescript"
+import { ReForgeGiveawaysLogger as log } from "../utils/logger"
 import { MessageReaction, PartialMessageReaction, PartialUser, Partials, User } from "discord.js"
 import { ReForgeGiveaways } from ".."
 import { Database } from "../structures"
@@ -13,7 +14,7 @@ export class GiveawaysReactionHandler {
     public constructor(private readonly client: ForgeClient) {
         const partials = client.options.partials ?? []
         if (!partials.includes(Partials.Message) || !partials.includes(Partials.Reaction)) {
-            Logger.warn(`[ReForgeGiveaways] Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`)
+            log.warn(`Enable the "Message" and "Reaction" partials so reactions on giveaway messages sent before a restart are seen`)
         }
 
         client.on("messageReactionAdd", (r, u) => void this.add(r, u).catch(noop))

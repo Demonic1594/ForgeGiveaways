@@ -89,6 +89,11 @@ export class Database {
         Database.emitter.emit("databaseConnect")
     }
 
+    /** The TypeORM driver in use (`sqlite`, `better-sqlite3`, `postgres`, ...), or undefined before connecting. */
+    public static get driverName(): string | undefined {
+        return this.db?.options.type
+    }
+
     /** Whether the database finished connecting. */
     public static get ready() {
         return !!this.db

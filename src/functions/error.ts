@@ -1,4 +1,4 @@
-import { Logger } from "@tryforge/forgescript"
+import { ReForgeGiveawaysLogger as log } from "../utils/logger"
 
 export enum GiveawaysErrorType {
     MessageNotFound = `Could not find and update the message for giveaway with ID "$1"`,
@@ -19,5 +19,5 @@ export enum GiveawaysErrorType {
 export function throwGiveawaysError(type: GiveawaysErrorType, value?: string) {
     const key = Object.keys(GiveawaysErrorType).find((x) => GiveawaysErrorType[x as keyof typeof GiveawaysErrorType] === type)
     const message = type.replace(/\$(\d+)/g, () => value ?? "")
-    Logger.error(`[ReForgeGiveaways] ${key}: ${message}`)
+    log.error(`${key}: ${message}`)
 }
