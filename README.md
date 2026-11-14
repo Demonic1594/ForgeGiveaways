@@ -479,6 +479,8 @@ node --test test/regression.test.js   # likewise adversarial, custom and hardeni
     git push origin v<x.y.z>
     ```
 
+    Pushing the tag publishes the GitHub release (`.github/workflows/release.yml`). Its notes come from `.github/release-notes/v<x.y.z>.md` if that file exists, otherwise from the version's section of `CHANGELOG.md`. The workflow refuses a tag that does not match the `package.json` version.
+
 > ⚠️ **Warning**\
 > Never change the type or length of an existing column in `src/structures/schema.ts`. ReForgeDB and ForgeDB let TypeORM synchronize the schema, and on PostgreSQL and MySQL TypeORM changes a column by dropping and re-creating it. Adding nullable columns is safe.
 
